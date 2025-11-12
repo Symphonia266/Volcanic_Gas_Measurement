@@ -1,0 +1,97 @@
+# coding: utf-8
+import sys
+import numpy as np
+import matplotlib.pyplot as plt
+from pathlib import Path
+from diffusion_model.diffuse_plume import DiffusePlumeLidar
+
+# プロジェクトルートを sys.path に追加
+# __file__ = samples/a.py
+project_root = Path(__file__).resolve().parent
+sys.path.append(str(project_root))
+
+def plotter(x, y, C, func, x_obs):
+    fig, ax = plt.subplots(1, 2, constrained_layout=True)
+    im = ax[0].imshow(
+        C,
+        origin="lower",
+        extent=[x.min(), x.max(), y.min(), y.max()],
+        aspect="equal",
+        vmax=0.025,
+        vmin=0,
+        cmap="jet",
+    )
+    fig.colorbar(im, label="Concentration")
+    ax[0].set_xlabel("Lidar X-axis [m]")
+    ax[0].set_ylabel("Lidar Y-axis [m]")
+    ax[1].plot(x, func(x, 0, 0))
+    ax[1].scatter(x_obs, func(x_obs, 0, 0))
+    plt.show(block=False)
+
+x_grid = np.linspace(0, 100, 250)
+y_grid = np.linspace(-50, 50, 250)
+z_grid = np.array([0])  # 地表面
+X, Y, Z = np.meshgrid(x_grid, y_grid, z_grid)
+dR = 7.5
+x_obs = np.arange(x_grid.min(), x_grid.max(), dR)[1:]
+
+# ---- パラメータ ----
+model_name = "pasquill"
+windspeed = 2
+wether = "clear"
+stab_class = None
+
+# 半径5mの面源
+mask = ((X - 50) ** 2 + Y**2) <= 5**2
+x_src = X[mask] - 50
+y_src = Y[mask]
+z_src = Z[mask]
+q_src = 1 / mask.sum()
+
+# ---- ソース設定（ライダー座標系で記述）----
+model = DiffusePlumeLidar(model_name, windspeed, 45, 0, wether, stab_class)
+pos_cnt = [30, -40, 0]
+model.entry_source(q_src, x_src + pos_cnt[0], y_src + pos_cnt[1], z_src + pos_cnt[2])
+C = model.Concentration(X, Y, Z)
+plotter(x_grid, y_grid, C, model.Concentration, x_obs)
+model.core.clear_source()
+
+pos_cnt = [50, -20, 0]
+model.entry_source(q_src, x_src + pos_cnt[0], y_src + pos_cnt[1], z_src + pos_cnt[2])
+C = model.Concentration(X, Y, Z)
+plotter(x_grid, y_grid, C, model.Concentration, x_obs)
+model.core.clear_source()
+
+pos_cnt = [70, 0, 0]
+model.entry_source(q_src, x_src + pos_cnt[0], y_src + pos_cnt[1], z_src + pos_cnt[2])
+C = model.Concentration(X, Y, Z)
+plotter(x_grid, y_grid, C, model.Concentration, x_obs)
+model.core.clear_source()
+
+model.update_azim_elev(90, 0)
+pos_cnt = [50, -50, 0]
+model.entry_source(q_src, x_src + pos_cnt[0], y_src + pos_cnt[1], z_src + pos_cnt[2])
+C = model.Concentration(X, Y, Z)
+plotter(x_grid, y_grid, C, model.Concentration, x_obs)
+model.core.clear_source()
+
+pos_cnt = [50, -20, 0]
+model.entry_source(q_src, x_src + pos_cnt[0], y_src + pos_cnt[1], z_src + pos_cnt[2])
+C = model.Concentration(X, Y, Z)
+plotter(x_grid, y_grid, C, model.Concentration, x_obs)
+model.core.clear_source()
+
+fig = plt.figure(constrained_layout=True)
+ax = fig.add_subplot(111, projection="3d")
+ax.view_init(elev=15, azim=20)
+ax.plot_wireframe(
+    X[:, :, 0], Y[:, :, 0], C[:, :, 0], color="blue", rstride=5, cstride=5
+)
+
+# 4. 軸ラベル
+ax.set_xlabel("X axis")
+ax.set_ylabel("Y axis")
+ax.set_zlabel("concentration coefficient")
+plt.show(block=False)
+
+input("ENTER ANY KEY")

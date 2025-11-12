@@ -52,32 +52,32 @@ q_src = 1 / mask.sum()
 model = DiffusePlumeLidar(model_name, windspeed, 45, 0, wether, stab_class)
 pos_cnt = [30, -40, 0]
 model.entry_source(q_src, x_src + pos_cnt[0], y_src + pos_cnt[1], z_src + pos_cnt[2])
-C = model.Concentration(X, Y, Z)
+C = model.Concentration(x_lidar=X, y_lidar=Y, z_lidar=Z)
 plotter(x_grid, y_grid, C, model.Concentration, x_obs)
 model.core.clear_source()
 
 pos_cnt = [50, -20, 0]
 model.entry_source(q_src, x_src + pos_cnt[0], y_src + pos_cnt[1], z_src + pos_cnt[2])
-C = model.Concentration(X, Y, Z)
+C = model.Concentration(x_lidar=X, y_lidar=Y, z_lidar=Z)
 plotter(x_grid, y_grid, C, model.Concentration, x_obs)
 model.core.clear_source()
 
 pos_cnt = [70, 0, 0]
 model.entry_source(q_src, x_src + pos_cnt[0], y_src + pos_cnt[1], z_src + pos_cnt[2])
-C = model.Concentration(X, Y, Z)
+C = model.Concentration(x_lidar=X, y_lidar=Y, z_lidar=Z)
 plotter(x_grid, y_grid, C, model.Concentration, x_obs)
 model.core.clear_source()
 
 model.update_azim_elev(90, 0)
 pos_cnt = [50, -50, 0]
 model.entry_source(q_src, x_src + pos_cnt[0], y_src + pos_cnt[1], z_src + pos_cnt[2])
-C = model.Concentration(X, Y, Z)
+C = model.Concentration(x_lidar=X, y_lidar=Y, z_lidar=Z)
 plotter(x_grid, y_grid, C, model.Concentration, x_obs)
 model.core.clear_source()
 
 pos_cnt = [50, -20, 0]
 model.entry_source(q_src, x_src + pos_cnt[0], y_src + pos_cnt[1], z_src + pos_cnt[2])
-C = model.Concentration(X, Y, Z)
+C = model.Concentration(x_lidar=X, y_lidar=Y, z_lidar=Z)
 plotter(x_grid, y_grid, C, model.Concentration, x_obs)
 model.core.clear_source()
 

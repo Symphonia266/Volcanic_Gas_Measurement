@@ -8,20 +8,24 @@ from .pasquill_stable_classfication import (
     classification_table,
     classification_label,
     classify_atomosphere_stability,
+    inverse_stab_class_to_wether
 )
 from .pasquill_model.pasquill_gifford_spreadwidth import SpreadWidth as PasquillSpread
 from .sutton_model.sutton_spreadwidth import SpreadWidth as SuttonSpread
 from .func import correct_time
 
 class DiffusePlume():
-    def __init__(self, model, windspeed, wether, stab_class):
+    def __init__(self, model, windspeed, *,  wether, stab_class):
         self.windspeed = windspeed
-        self.wether = wether
         if stab_class != None:
+            self.wehter = inverse_stab_class_to_wether(windspeed, stab_class)
             self.stab_class = stab_class
-        else:
+        elif wether != None:
+            self.wether = wether
             self.stab_class = classify_atomosphere_stability(windspeed, wether)
-
+        else:
+             raise ValueError("ERROR : wether or stability class are empty")
+        
         if model == "pasquill":
             self.model = PasquillSpread()
         if model == "sutton":
@@ -63,7 +67,7 @@ class DiffusePlume():
     def clear_source(self):
         self.sources = pd.DataFrame(columns=["Q", "x", "y", "z"], dtype=float)
 
-    def Concentration(self, x_in, y_in, z_in, *, time_correction=False):
+    def Concentration(self, x_in, y_in, z_in, *, time_correction=None):
         x = np.asarray(x_in)
         y = np.asarray(y_in)
         z = np.asarray(z_in)
@@ -81,7 +85,7 @@ class DiffusePlume():
             if z.ndim == 1: z = z[np.newaxis, np.newaxis, :]
         
 
-        if time_correction:
+        if time_correction is not None:
             windspeed = self.windspeed * time_correction
         else: 
             windspeed = self.windspeed *3*60
@@ -140,8 +144,8 @@ class DiffusePlumeLidar():
     ライダー座標系で濃度計算を行うための上位互換クラス。
     内部で風向角に基づきモデル座標へ変換して DiffusePlume に委譲する。
     """
-    def __init__(self, model, windspeed, wind_direction_deg, elevation,  wether, stab_class):
-        self.core = DiffusePlume(model, windspeed, wether, stab_class)
+    def __init__(self, model, windspeed, wind_direction_deg, elevation, *, wether=None, stab_class=None):
+        self.core = DiffusePlume(model=model, windspeed=windspeed, wether=wether, stab_class=stab_class)
         self.wind_direction = np.deg2rad(wind_direction_deg)
         self.elevation = np.deg2rad(elevation)
 
@@ -159,7 +163,7 @@ class DiffusePlumeLidar():
         )
         self.core.entry_source(Q, x_wind, y_wind, z_wind)
 
-    def Concentration(self, x_lidar, y_lidar, z_lidar, *, time_correction=False):
+    def Concentration(self, x_lidar, *, y_lidar=0.0, z_lidar=0.0, time_correction=None):
         # 計算点もライダー座標 → 風下座標へ
         x_wind, y_wind, z_wind = rotate_lidar_to_plume(
             np.asarray(x_lidar), 

@@ -5,8 +5,6 @@ from matplotlib import pyplot as plt
 from tqdm import tqdm
 
 from .pasquill_stable_classfication import (
-    classification_table,
-    classification_label,
     classify_atomosphere_stability,
     inverse_stab_class_to_wether
 )
@@ -101,10 +99,12 @@ class DiffusePlume():
             x = x-source["x"]
             y = y-source["y"]
             z = z-source["z"]
-            
-            mask = x>source["x"]
-            sigma_y = self.model.lateral(x[mask]-source["x"], self.stab_class)
-            sigma_z = self.model.vertical(x[mask]-source["x"], self.stab_class)
+
+            # mask points downwind of the source (x relative to source > 0)
+            mask = x > 0
+            # compute spread widths only at masked (downwind) points
+            sigma_y = self.model.lateral(x[mask], self.stab_class)
+            sigma_z = self.model.vertical(x[mask], self.stab_class)
 
             if time_correction:
                 Q = source["Q"] * time_correction
@@ -113,18 +113,19 @@ class DiffusePlume():
             else:
                 Q = source["Q"] * 3*60
 
-            C_i[mask] = (
+            # build concentration only at masked indices so RHS length matches mask.sum()
+            C_i_mask = (
                 Q / (2 * np.pi * sigma_y * sigma_z * windspeed)
                 * np.exp( -(y[mask]**2) / (2 * sigma_y**2) )
-                *(  
+                * (
                     np.exp(-((z[mask] + source["H"]) ** 2) / (2 * sigma_z**2))
                     + np.exp(-((z[mask] - source["H"]) ** 2) / (2 * sigma_z**2))
-                ) 
+                )
             )
+            C_i[mask] = C_i_mask
             C_i[~mask] = 0
             C_total += C_i
         return C_total
-
 
 def lidar_to_plume(x, y, z, origin, azim):
     """
@@ -148,18 +149,17 @@ def lidar_to_plume(x, y, z, origin, azim):
     y_p = -np.sin(azim)*dx + np.cos(azim)*dy
     z_p = dz  # zはそのまま
     return x_p, y_p, z_p
-
 class DiffusePlumeLidar(DiffusePlume):
     """
     ライダー座標系で濃度計算を行うための上位互換クラス。
     内部で風向角に基づきモデル座標へ変換して DiffusePlume に委譲する。
     """
-    def __init__(self, model, windspeed, wind_direction_deg, elevation, *, wether=None, stab_class=None):
+    def __init__(self, model, windspeed, wind_direction_deg, *, wether=None, stab_class=None):
         super().__init__(model, windspeed, wether=wether, stab_class=stab_class)
         self.wind_direction = np.deg2rad(wind_direction_deg)
         # self.elevation = np.deg2rad(elevation)
 
-    def update_azim_elev(self, wind_direction_deg, elevation):
+    def update_wind_direction(self, wind_direction_deg, elevation):
         self.wind_direction = np.deg2rad(wind_direction_deg)
         # self.elevation = np.deg2rad(elevation)
 
@@ -168,14 +168,9 @@ class DiffusePlumeLidar(DiffusePlume):
         y = np.atleast_1d(y)
         z = np.atleast_1d(z)
 
-        # --- judge input pattern ---
-        if not (x.size == 1 or y.size == 1 or z.size == 1):
-            X, Y, Z = np.meshgrid(x, y, z, indexing="ij")
-        else:
-            # case: 1D line
-            X, Y, Z = np.broadcast_arrays(x, y, z)
-
-        C_total = np.zeros_like(X, dtype=float)
+        # --- broadcast arrays so all shapes match ---
+        x, y, z = np.broadcast_arrays(x, y, z)
+        C_total = np.zeros_like(x, dtype=float)
         
         # --- windspeed correction ---
         if time_correction is not None:
@@ -189,37 +184,38 @@ class DiffusePlumeLidar(DiffusePlume):
             desc="Intergrate all fauntains",
             bar_format="[{desc}, Remaining {remaining}] {percentage:3.1f}% ({elapsed}) |{bar:20}| [{n}/{total}, {rate_fmt}]"
         ):
-            x_p,y_p,z_p = lidar_to_plume(
-                x, 
-                y, 
-                z, 
-                [source["x"], source["y"], source["z"]], 
-                self.wind_direction
+            # use the broadcasted grid arrays so shapes of x_p, y_p, z_p match
+            x_p, y_p, z_p = lidar_to_plume(
+                x,
+                y,
+                z,
+                [source["x"], source["y"], source["z"]],
+                self.wind_direction,
             )
             mask = x_p > 0
 
+            # compute spread widths only at downwind points
             sigma_y = np.zeros_like(x_p)
             sigma_z = np.zeros_like(x_p)
-
-            sigma_y[mask] = self.model.lateral( x_p, self.stab_class)
-            sigma_z[mask] = self.model.vertical(x_p, self.stab_class)
+            sigma_y[mask] = self.model.lateral(x_p[mask], self.stab_class)
+            sigma_z[mask] = self.model.vertical(x_p[mask], self.stab_class)
 
             if time_correction:
                 Q = source["Q"] * time_correction
-                sigma_y = correct_time(time_correction, sigma_y)
-                sigma_z = correct_time(time_correction, sigma_z)
+                sigma_y[mask] = correct_time(time_correction, sigma_y[mask])
+                sigma_z[mask] = correct_time(time_correction, sigma_z[mask])
             else:
                 Q = source["Q"] * 3 * 60
 
-            C = np.zeros_like(X, dtype=float)
+            C = np.zeros_like(x_p, dtype=float)
             C[mask] = (
-                Q / (2 * np.pi * sigma_y * sigma_z * windspeed)
-                * np.exp( -(y_p[mask]**2) / (2 * sigma_y[mask]**2) )
-                * (
+                Q / (2 * np.pi * sigma_y[mask] * sigma_z[mask] * windspeed) * 
+                np.exp( -(y_p[mask]**2) / (2 * sigma_y[mask]**2) ) * 
+                (
                     np.exp(-((z_p[mask]-source["H"]) ** 2) / (2 * sigma_z[mask]**2)) + 
                     np.exp(-((z_p[mask]+source["H"]) ** 2) / (2 * sigma_z[mask]**2))
                 )
             )
             C_total += C
 
-        return C_total.squeeze()  
+        return C_total 

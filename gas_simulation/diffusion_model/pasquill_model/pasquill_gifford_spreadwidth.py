@@ -112,7 +112,7 @@ class SpreadWidth:
             self.func_lateral[lb], 
             self.interval_lateral[lb], 
             transform=np.log10)
-        return y.item() if np.isscalar(x) else y
+        return y
 
     def vertical(self, x, lb):
         xx = np.asarray(x)
@@ -122,4 +122,4 @@ class SpreadWidth:
             self.interval_vertical[lb], 
             transform=np.log10
         )
-        return z.item() if np.isscalar(x) else z
+        return z

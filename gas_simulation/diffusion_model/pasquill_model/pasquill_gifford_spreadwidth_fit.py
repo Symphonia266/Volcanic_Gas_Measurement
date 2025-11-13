@@ -4,9 +4,12 @@ import numpy as np
 import pandas as pd
 import re
 import matplotlib.pyplot as plt
-from . import package_path, cmap
-from ..pasquill_stable_classfication import PGStableClassfication as PG
-
+from . import package_path
+from ..pasquill_stable_classfication import (
+    classification_table,
+    classification_label,
+    classify_atomosphere_stability,
+)
 pas_giff_z = pd.DataFrame(
     [
         ["A", 1.122, 0.0800, 0],

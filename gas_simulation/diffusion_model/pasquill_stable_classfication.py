@@ -38,7 +38,7 @@ def classify_atomosphere_stability(windspeed: float, wether: str):
         raise ValueError("WINDSPEED ERROR!")
     col = wether_conditions.get(wether, 4)
     stability_class = classification_table[row][col]
-    return windspeed, wether, stability_class
+    return stability_class
 
 def inverse_stab_class_to_wether(windspeed: float, stab_class: str):
     row = bisect_left(windspeed_thresholds, windspeed)-1

@@ -5,57 +5,62 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from . import package_path
-from ..pasquill_stable_classfication import PGStableClassfication as PG
+from ..pasquill_stable_classfication import (
+    classification_table,
+    classification_label,
+    classify_atomosphere_stability,
+    inverse_stab_class_to_wether
+)
 
 lateral = {
     "A": pd.read_csv(
-        os.path.join(package_path, "lateral", "A_extremely_unstable.csv"),
+        os.path.join(package_path, "data", "sampling_lateral", "A_extremely_unstable.csv"),
         names=["dist", "spread"],
     ),
     "B": pd.read_csv(
-        os.path.join(package_path, "lateral", "B_moderately_unstable.csv"),
+        os.path.join(package_path, "data", "sampling_lateral", "B_moderately_unstable.csv"),
         names=["dist", "spread"],
     ),
     "C": pd.read_csv(
-        os.path.join(package_path, "lateral", "C_slightly_unstable.csv"),
+        os.path.join(package_path, "data", "sampling_lateral", "C_slightly_unstable.csv"),
         names=["dist", "spread"],
     ),
     "D": pd.read_csv(
-        os.path.join(package_path, "lateral", "D_neutral.csv"),
+        os.path.join(package_path, "data", "sampling_lateral", "D_neutral.csv"),
         names=["dist", "spread"],
     ),
     "E": pd.read_csv(
-        os.path.join(package_path, "lateral", "E_slightly_stable.csv"),
+        os.path.join(package_path, "data", "sampling_lateral", "E_slightly_stable.csv"),
         names=["dist", "spread"],
     ),
     "F": pd.read_csv(
-        os.path.join(package_path, "lateral", "F_moderately_stable.csv"),
+        os.path.join(package_path, "data", "sampling_lateral", "F_moderately_stable.csv"),
         names=["dist", "spread"],
     ),
 }
 vertical = {
     "A": pd.read_csv(
-        os.path.join(package_path, "vertical", "A_extremely_unstable.csv"),
+        os.path.join(package_path, "data", "sampling_vertical", "A_extremely_unstable.csv"),
         names=["dist", "spread"],
     ),
     "B": pd.read_csv(
-        os.path.join(package_path, "vertical", "B_moderately_unstable.csv"),
+        os.path.join(package_path, "data", "sampling_vertical", "B_moderately_unstable.csv"),
         names=["dist", "spread"],
     ),
     "C": pd.read_csv(
-        os.path.join(package_path, "vertical", "C_slightly_unstable.csv"),
+        os.path.join(package_path, "data", "sampling_vertical", "C_slightly_unstable.csv"),
         names=["dist", "spread"],
     ),
     "D": pd.read_csv(
-        os.path.join(package_path, "vertical", "D_neutral.csv"),
+        os.path.join(package_path, "data", "sampling_vertical", "D_neutral.csv"),
         names=["dist", "spread"],
     ),
     "E": pd.read_csv(
-        os.path.join(package_path, "vertical", "E_slightly_stable.csv"),
+        os.path.join(package_path, "data", "sampling_vertical", "E_slightly_stable.csv"),
         names=["dist", "spread"],
     ),
     "F": pd.read_csv(
-        os.path.join(package_path, "vertical", "F_moderately_stable.csv"),
+        os.path.join(package_path, "data", "sampling_vertical", "F_moderately_stable.csv"),
         names=["dist", "spread"],
     ),
 }
@@ -75,7 +80,7 @@ if __name__ == "__main__":
 
     sigma_y = {}
     sigma_z = {}
-    for lb in PG.lbs:
+    for lb in classification_label:
         f_y = pg_chart_interp(lateral[lb])
         f_z = pg_chart_interp(vertical[lb])
         sigma_y[lb] = f_y(x)
@@ -87,17 +92,17 @@ if __name__ == "__main__":
     df2 = pd.DataFrame(sigma_z)
     df1.insert(0, "dist", x)
     df2.insert(0, "dist", x)
-    df1.to_csv(package_path + "lateral/spread_normalize.csv")
-    df2.to_csv(package_path + "vertical/spread_normalize.csv")
+    df1.to_csv(package_path + "normalized_lateral_spreadwidth.csv")
+    df2.to_csv(package_path + "normalized_vertical_spreadwidthe.csv")
 
     fig, ax = plt.subplots(1, 2, layout="tight")
     ax[0].grid(which="major", axis="both", ls="-", c="darkgrey")
     ax[1].grid(which="major", axis="both", ls="-", c="darkgrey")
     ax[0].grid(which="minor", axis="both", ls="--", c="lightgrey")
     ax[1].grid(which="minor", axis="both", ls="--", c="lightgrey")
-    for lb in PG.lbs:
-        ax[0].plot(x, sigma_y[lb], label=lb, c=cmap[lb])
-        ax[1].plot(x, sigma_z[lb], label=lb, c=cmap[lb])
+    for lb in classification_label:
+        ax[0].plot(x, sigma_y[lb], label=lb)
+        ax[1].plot(x, sigma_z[lb], label=lb)
         i += 1
     # ax[0].plot(data_B["dist"], data_B["spread"], label="B")
     # ax[0].plot(data_C["dist"], data_C["spread"], label="C")

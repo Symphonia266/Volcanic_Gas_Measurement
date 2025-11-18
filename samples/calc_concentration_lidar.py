@@ -9,8 +9,8 @@ import matplotlib.pyplot as plt
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from gas_simulation.diffusion_model.diffuse_plume import DiffusePlumeLidar
+from gas_simulation.diffusion_model.diffuse_plume import lidar_to_plume
 from gas_simulation.diffusion_model.func import gen_fauntainsource
-
 
 def plotter(x, y, C, func, x_obs):
     fig, ax = plt.subplots(1, 2, constrained_layout=True)

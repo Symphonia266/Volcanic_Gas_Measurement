@@ -20,7 +20,7 @@ class Lidar :
     def __init__(
         self, 
         *,
-        end = 1000,
+        end = 100,
         dR: float = 5,
         elevation=0,
         alt_offset=1,
@@ -66,16 +66,3 @@ class Lidar :
         )
         return t1*beta*tau
         
-class DIAL:
-    def __init__(
-        self,         
-        distance,
-        wl_on, 
-        wl_off,
-        Bj: float = 0,
-        F: float = 1,
-        D: float = 0,
-    ):
-      sys = Lidar()
-      p_on = sys.power(wl_on)
-      p_on = sys.power(distance, wl_on)

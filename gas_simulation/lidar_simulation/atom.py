@@ -1,9 +1,7 @@
 import numpy as np
-from functools import cache
 from . import package_path
 from .consts import gases, s_raman_N2, s_raman_O2
 
-@cache
 def N(z):
     """atmosphere number density of molecules [m-3]"""
     return 2.60e25 * np.exp(-1.08e-4 * z)

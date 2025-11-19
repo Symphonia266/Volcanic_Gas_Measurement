@@ -116,9 +116,13 @@ class MeasurementModel:
         # self.wl_on[~flg]  = self.wl["O2_ST"][~flg]
         # self.wl_off[~flg] = self.wl["N2_ST"][~flg]
 
-        self.gases = {}
+        self.wl = {"laser":300}
+        self.wl["N2_st"] = utils.wl_shift(self.wl["laser"], gases.at["N2", "sft"], False)
+        self.wl["O2_st"] = utils.wl_shift(self.wl["laser"], gases.at["O2", "sft"], False)
+        self.wl["N2_as"] = utils.wl_shift(self.wl["laser"], gases.at["N2", "sft"], True)
+        self.wl["O2_as"] = utils.wl_shift(self.wl["laser"], gases.at["O2", "sft"], True)
 
-        # self.entry_source(radius=5, cnt=(50, -40, 0), H=2)
+        self.gases = {}
 
     def entry_source(self, radius, cnt, He):
         x_src, y_src, q_src = gen_fauntainsource(radius=radius, cnt=cnt, N_pt=10)

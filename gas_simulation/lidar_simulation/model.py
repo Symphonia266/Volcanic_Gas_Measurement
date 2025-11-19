@@ -3,13 +3,27 @@ import os
 import sys
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
+from matplotlib import pyplot as plt
 from pathlib import Path
 from dataclasses import dataclass
+from pyparsing import alphas
+from scipy import constants as consts
 from scipy.interpolate import interp1d
 
 from . import package_path, data_dir, data_file
+from .consts import gases, s_raman_N2, s_raman_O2
+from .atom import (
+    N, 
+    alphas_aer, 
+    alphas_mol, 
+    betas_aer, 
+    betas_mol
+)
+from . import utils
+from .lidar import Lidar
+from .optics import overlap
+
 from ..diffusion_model.diffuse_plume import DiffusePlumeLidar
 from ..diffusion_model.func import gen_fauntainsource
 from ..diffusion_model.pasquill_stable_classfication import (
@@ -19,60 +33,49 @@ from ..diffusion_model.pasquill_stable_classfication import (
     inverse_stab_class_to_wether,
 )
 
-def _read_excel_safe(fname, **kwargs):
-    p = data_dir / fname
-    if not p.exists():
-        raise FileNotFoundError(f"file are not found: {p}")
-    return pd.read_excel(p, **kwargs)
 
-def load_cross_section(fname, *, skiprows=5, wl_col=0, xs_col=1, interp_kwargs=None, **read_kwargs):
-    """
-    Excel ファイルを読み、WL/XS 列を取り出して interp1d を返す。
-    - skiprows: ヘッダ等のスキップ行数（既定値は 5）
-    - interp_kwargs: interp1d に渡す dict（例: {'bounds_error':False, 'fill_value':'extrapolate'}）
-    """
-    interp_kwargs = dict(interp_kwargs or {})
-    df = _read_excel_safe(
-        fname, 
-        skiprows=skiprows, 
-        header=None, 
-        usecols=[wl_col, xs_col], 
-        names=["WL", "XS"], 
-        **read_kwargs
-    )
-    df = df.dropna(subset=["WL", "XS"]).sort_values("WL")
-    wl = df["WL"].to_numpy()
-    xs = df["XS"].to_numpy()
-    return interp1d(wl, xs, **interp_kwargs)
 
-def load_cross_section_dict(mapping, *, interp_kwargs=None, **read_kwargs):
-    return {
-        k: load_cross_section(v, interp_kwargs=interp_kwargs, **read_kwargs) 
-        for k, v in mapping.items()
-    }
 
-xs_SO2 = load_cross_section_dict(
-    {
-        "cold": "SO2_VandaeleHermansFally(2009)_298K_227.275-416.658nm.xlsx",
-        "hot":  "SO2_VandaeleHermansFally(2009)_358K_227.275-416.658nm.xlsx",
-    },
-    interp_kwargs={"bounds_error": False, "fill_value": np.nan},
+# xs_SO2 = load_cross_section_dict(
+#     {
+#         "cold": "SO2_VandaeleHermansFally(2009)_298K_227.275-416.658nm.xlsx",
+#         "hot":  "SO2_VandaeleHermansFally(2009)_358K_227.275-416.658nm.xlsx",
+#     },
+#     interp_kwargs={"bounds_error": False, "fill_value": np.nan},
+# )
+
+# xs_H2S = load_cross_section_dict(
+#     {
+#         "cold": "H2S_Grosch(2015)_294.8K_198-370nm.xlsx",
+#         "hot":  "H2S_Grosch(2015)_423.2K_198-370nm.xlsx",
+#     },
+#     interp_kwargs={"bounds_error": False, "fill_value": np.nan},
+# )
+
+xs_SO2 = utils.load_cross_section(
+    "SO2_VandaeleHermansFally(2009)_358K_227.275-416.658nm.xlsx", 
+    interp_kwargs={"bounds_error": False, "fill_value": np.nan}, 
+    effective=
 )
-
-xs_H2S = load_cross_section_dict(
-    {
-        "cold": "H2S_Grosch(2015)_294.8K_198-370nm.xlsx",
-        "hot":  "H2S_Grosch(2015)_423.2K_198-370nm.xlsx",
-    },
-    interp_kwargs={"bounds_error": False, "fill_value": np.nan},
+xs_H2S = utils.load_cross_section(
+    "H2S_Grosch(2015)_423.2K_198-370nm.xlsx", 
+    interp_kwargs={"bounds_error": False, "fill_value": np.nan}
 )
-
-xs_O3 = load_cross_section(
+xs_O3 = utils.load_cross_section(
     "O3_Bogumil(2003)_293K_230-1070nm.xlsx", 
-    interp_kwargs={"bounds_error": False, "fill_value": np.nan})
+    interp_kwargs={"bounds_error": False, "fill_value": np.nan}
+)
 
+E0:float=0.1
+A:float=0.3
+M: float = 100 * 60 * 60
+eta: float = 0.3
+q: float = 0.3
+dR: float = 30
+Bj: float = 0
+F: float = 1
+D: float = 0
 
-print(xs_SO2["hot"](230))
 @dataclass
 class Gases:
     Q: float
@@ -84,20 +87,26 @@ class MeasurementModel:
     ) -> None:
         self.speed = windspeed
         self.wind_direction = wind_direction
-        self.elevation = elevation
         self.diffusemodel = DiffusePlumeLidar(
             "pasquill", windspeed, wind_direction, wether=wether, stab_class=stab_class
         )
         self.wether = self.diffusemodel.wether
         self.stab_class = self.diffusemodel.stab_class
 
-        dR = 5
-        self.distance = np.arange(0, 100, dR)
-        self.x_grid = self.distance * np.cos(np.deg2rad(self.elevation))
-        self.z_grid = self.distance * np.sin(np.deg2rad(self.elevation))+1
+        self.lidar = Lidar(elevation=elevation)
+        # self.wl = {"laser":np.arange(230, 370, 0.1)}
+        # self.wl["N2_st"] = utils.wl_shift(self.wl["laser"], gases.at["N2", "sft"], False)
+        # self.wl["O2_st"] = utils.wl_shift(self.wl["laser"], gases.at["O2", "sft"], False)
+        # self.wl["N2_as"] = utils.wl_shift(self.wl["laser"], gases.at["N2", "sft"], True)
+        # self.wl["O2_as"] = utils.wl_shift(self.wl["laser"], gases.at["O2", "sft"], True)
+
+        self.wl = {"laser":300}
+        self.wl["N2_st"] = utils.wl_shift(self.wl["laser"], gases.at["N2", "sft"], False)
+        self.wl["O2_st"] = utils.wl_shift(self.wl["laser"], gases.at["O2", "sft"], False)
+        self.wl["N2_as"] = utils.wl_shift(self.wl["laser"], gases.at["N2", "sft"], True)
+        self.wl["O2_as"] = utils.wl_shift(self.wl["laser"], gases.at["O2", "sft"], True)
 
         self.gases = {}
-
 
         # self.entry_source(radius=5, cnt=(50, -40, 0), H=2)
 
@@ -105,11 +114,26 @@ class MeasurementModel:
         x_src, y_src, z_src, q_src = gen_fauntainsource(radius=radius, cnt=cnt, N_pt=10)
         self.diffusemodel.entry_source(q_src, x_src, y_src, z_src, H)
         self.C = self.diffusemodel.Concentration(
-            self.x_grid, z=self.z_grid, time_correction=10 * 60
+            self.lidar.x_grid, z=self.lidar.z_grid, time_correction=10 * 60
         )
 
-    def entry_gases(self, name: str, Q, offset):
-        self.gases[name] = Gases(Q=Q, offset=offset, distribution=Q * self.C + offset)
+    def transmittance(self):
+        xs_SO2 = {
+            k:utils.calc_of_effective(self.wl[k], xs_SO2)
+            for k in self.wl.keys()
+        }
+        xs_H2S = {
+            k:utils.calc_of_effective(self.wl[k], xs_H2S)
+            for k in self.wl.keys()
+        }
+        xs_O3 = {
+            k:utils.calc_of_effective(self.wl[k], xs_O3)
+            for k in self.wl.keys()
+        }
+
+    def entry_gases(self, name: str, Q:float, offset:float, xs):
+        gas = Gases(Q=Q, offset=offset, distribution=Q * self.C + offset)
+        self.gases[name] = gas
 
     def update_gases(self, *, name: str, Q=None, offset=None):
         if Q is not None:
@@ -133,7 +157,7 @@ class MeasurementModel:
             stab_class=stab_class,
         )
         self.C = self.diffusemodel.Concentration(
-            self.x_grid, z=self.z_grid, time_correction=10 * 60
+            self.lidar.x_grid, z=self.lidar.z_grid, time_correction=10 * 60
         )
         for gas in self.gases.keys():
             self.update_gases(name=gas)
@@ -149,8 +173,8 @@ class MeasurementModel:
         ax3.grid(which="major", ls="-", c="darkgrey")
 
         for name in self.gases.keys():
-            ax1.scatter(self.distance, self.gases[name].distribution, clip_on=False,label=name)
-        r = np.linspace(self.distance.min(), self.distance.max(), 1000)
+            ax1.scatter(self.lidar.distance, self.gases[name].distribution, clip_on=False,label=name)
+        r = np.linspace(self.lidar.distance.min(), self.lidar.distance.max(), 1000)
         ax2.plot(
             r, self.diffusemodel.Concentration(r, time_correction=10 * 60), c="darkgrey",clip_on=False
         )
@@ -160,7 +184,7 @@ class MeasurementModel:
         ax1.legend()
 
         ax3.view_init(elev=30, azim=-110)
-        x = np.linspace(self.x_grid.min(), self.x_grid.max(), 200)
+        x = np.linspace(self.lidar.x_grid.min(), self.lidar.x_grid.max(), 200)
         y = np.linspace(-50, 50, 200)
         x, y = np.meshgrid(x, y)
         C = self.diffusemodel.Concentration(x, y=y, z=0)
@@ -179,5 +203,18 @@ class MeasurementModel:
         ax1.set_ylim(0, 35)
         ax2.set_ylim(0, ax3.get_zlim()[1])
         # plt.tight_layout()
+        plt.show(block=False)
+        # input("ENTER ANY KEY...")
+
+    def show_alphas(self):
+        fig, axes = plt.subplots(1,2, layout="tight")
+        for ax in axes:
+            ax.grid(which="minor", ls="--", c="lightgrey")
+            ax.grid(which="major", ls="-", c="darkgrey")
+            ax.set_ylabel(r"absorptance $\alpha$")
+        for key in self.alphas.keys():
+            axes[0].scatter(self.lidar.distance, self.alphas[key][])        
+            axes[1].scatter(self.wl["laser"], self.alphas[key])        
+
         plt.show(block=False)
         # input("ENTER ANY KEY...")

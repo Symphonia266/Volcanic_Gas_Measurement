@@ -52,15 +52,14 @@ class DiffusePlume:
             self.wether = wether
             self.stab_class = classify_atomosphere_stability(windspeed, wether)
 
-    def entry_source(self, Q, x, y, z, H):
+    def entry_source(self, Q, x, y, He):
         Q = np.atleast_1d(Q)
         x = np.atleast_1d(x)
         y = np.atleast_1d(y)
-        z = np.atleast_1d(z)
-        H = np.atleast_1d(H)
+        He = np.atleast_1d(He)
 
         # 各配列の長さを確認
-        lengths = np.array([Q.size, x.size, y.size, z.size, H.size])
+        lengths = np.array([Q.size, x.size, y.size, He.size])
         max_len = np.max(lengths)
         min_len = np.min(lengths)
 
@@ -72,26 +71,25 @@ class DiffusePlume:
             # ブロードキャストできる条件：スカラー（長さ1）が混ざっている場合のみ
             if not np.all((lengths == 1) | (lengths == max_len)):
                 raise ValueError(
-                    f"Inconsistent array lengths: Q={len(Q)}, x={len(x)}, y={len(y)}, z={len(z)}, H={len(H)}"
+                    f"Inconsistent array lengths: Q={len(Q)}, x={len(x)}, y={len(y)}, He={len(He)}"
                 )
             # スカラーをブロードキャスト（長さmax_lenに拡張）
             else:
-                Q, x, y, z, H = map(expand, (Q, x, y, z, H))
+                Q, x, y, He = map(expand, (Q, x, y, He))
 
         source = pd.DataFrame(
             {
                 "Q": np.atleast_1d(Q),  # 放出強度
                 "x": np.atleast_1d(x),  # 煙源X座標
                 "y": np.atleast_1d(y),  # 煙源Y座標
-                "z": np.atleast_1d(z),  # 煙源Z座標
-                "H": np.atleast_1d(H),  # 有効煙源高度
+                "He": np.atleast_1d(He),  # 有効煙源高度
             },
             dtype=float,
         )
         self.sources = pd.concat([self.sources, source], ignore_index=True)
 
     def clear_source(self):
-        self.sources = pd.DataFrame(columns=["Q", "x", "y", "z", "H"], dtype=float)
+        self.sources = pd.DataFrame(columns=["Q", "x", "y", "He"], dtype=float)
 
     def Concentration(self, x_in, y_in, z_in, *, time_correction=None):
         x = np.asarray(x_in)
@@ -126,7 +124,6 @@ class DiffusePlume:
         ):
             x = x - source["x"]
             y = y - source["y"]
-            z = z - source["z"]
 
             # mask points downwind of the source (x relative to source > 0)
             mask = x > 0
@@ -147,8 +144,8 @@ class DiffusePlume:
                 / (2 * np.pi * sigma_y * sigma_z * windspeed)
                 * np.exp(-(y[mask] ** 2) / (2 * sigma_y**2))
                 * (
-                    np.exp(-((z[mask] + source["H"]) ** 2) / (2 * sigma_z**2))
-                    + np.exp(-((z[mask] - source["H"]) ** 2) / (2 * sigma_z**2))
+                    np.exp(-((z[mask] + source["He"]) ** 2) / (2 * sigma_z**2))
+                    + np.exp(-((z[mask] - source["He"]) ** 2) / (2 * sigma_z**2))
                 )
             )
             C_i[mask] = C_i_mask
@@ -237,7 +234,7 @@ class DiffusePlumeLidar(DiffusePlume):
                 x,
                 y,
                 z,
-                [source["x"], source["y"], source["z"]],
+                [source["x"], source["y"], 0],
                 self.wind_direction,
             )
             mask = x_p > 0
@@ -261,9 +258,9 @@ class DiffusePlumeLidar(DiffusePlume):
                 / (2 * np.pi * sigma_y[mask] * sigma_z[mask] * windspeed)
                 * np.exp(-(y_p[mask] ** 2) / (2 * sigma_y[mask] ** 2))
                 * (
-                    np.exp(-((z_p[mask] - source["H"]) ** 2) / (2 * sigma_z[mask] ** 2))
+                    np.exp(-((z_p[mask] - source["He"]) ** 2) / (2 * sigma_z[mask] ** 2))
                     + np.exp(
-                        -((z_p[mask] + source["H"]) ** 2) / (2 * sigma_z[mask] ** 2)
+                        -((z_p[mask] + source["He"]) ** 2) / (2 * sigma_z[mask] ** 2)
                     )
                 )
             )

@@ -1,32 +1,33 @@
 # coding: utf-8
 import os
 import sys
+from types import LambdaType
 import numpy as np
 import pandas as pd
 
-from matplotlib import pyplot as plt
 from pathlib import Path
-from dataclasses import dataclass
-from pyparsing import alphas
-from scipy import constants as consts
+from matplotlib import pyplot as plt
+from dataclasses import dataclass, field
 from scipy.interpolate import interp1d
+# from scipy import constants as consts
+# from scipy.interpolate import interp1d
 
 from . import package_path, data_dir, data_file
-from . import utils
 
+from . import utils
 from .consts import gases, s_raman_N2, s_raman_O2
 from .atom import N, alphas_aer, alphas_mol, betas_N2, betas_aer, betas_mol
+
 from .lidar_model.lidar import Lidar
 
-from .diffusion_model.diffuse_plume import DiffusePlumeLidar
-from .diffusion_model.func import gen_fauntainsource
 from .diffusion_model.pasquill_stable_classfication import (
     classification_label,
     classification_table,
     classify_atomosphere_stability,
     inverse_stab_class_to_wether,
 )
-
+from .diffusion_model.func import gen_fauntainsource
+from .diffusion_model.diffuse_plume import DiffusePlumeLidar
 
 # xs_SO2 = load_cross_section_dict(
 #     {
@@ -44,85 +45,111 @@ from .diffusion_model.pasquill_stable_classfication import (
 #     interp_kwargs={"bounds_error": False, "fill_value": np.nan},
 # )
 
-xs_SO2 = utils.load_cross_section(
-    "SO2_VandaeleHermansFally(2009)_358K_227.275-416.658nm.xlsx",
-    interp_kwargs={"bounds_error": False, "fill_value": np.nan},
-    effective=True,
-)
-xs_H2S = utils.load_cross_section(
-    "H2S_Grosch(2015)_423.2K_198-370nm.xlsx",
-    interp_kwargs={"bounds_error": False, "fill_value": np.nan},
-    effective=True,
-)
-xs_O3 = utils.load_cross_section(
-    "O3_Bogumil(2003)_293K_230-1070nm.xlsx",
-    interp_kwargs={"bounds_error": False, "fill_value": np.nan},
-    effective=True,
-)
+def gen_conbi(wl, scat1, scat2, dir1, dir2):
+    wl_s1 = utils.wl_shift(wl, gases.at[scat1, "sft"], dir1)
+    wl_s2 = utils.wl_shift(wl, gases.at[scat2, "sft"], dir2)
+    return wl_s1, wl_s2
 
-
-@dataclass
-class Gases:
-    Q: float
-    offset: float
-    distribution: np.ndarray
-
-
-class Transmittance:
-    def __init__(self, lidar, wl):
-        feat = 1
-        alpha = {
-            "mol": alphas_mol(wl, lidar.z_grid),
-            "aer": alphas_aer(wl, lidar.z_grid, feat),
-            "SO2": lambda r, wl: n_SO2(r) * xs_SO2(wl),
-            "H2S": lambda r, wl: n_H2S(r) * xs_SO2(wl),
-            "O3": lambda r, wl: n_O3(r) * xs_SO2(wl),
-        }
-
-
-class EnviromentModel:
+class Gas:
+    def __init__(self, Q:float, offset:float, cross_section):
+        self.Q = Q
+        self.offset = offset
+        self.cross_section = cross_section
+        self.concentration: np.ndarray
+class Enviroment:
     def __init__(
-        self, windspeed, wind_direction, elevation, *, wether=None, stab_class=None
+        self, 
+        windspeed, 
+        wind_direction, 
+        source_kwargs:dict, 
+        gases:dict,
+        *, 
+        wether=None, 
+        stab_class=None
+
     ) -> None:
         self.speed = windspeed
         self.wind_direction = wind_direction
-        self.diffusemodel = DiffusePlumeLidar(
-            "pasquill", windspeed, wind_direction, wether=wether, stab_class=stab_class
+        self.diffuse = DiffusePlumeLidar(
+            windspeed, wind_direction, wether=wether, stab_class=stab_class, model="pasquill"
         )
-        self.wether = self.diffusemodel.wether
-        self.stab_class = self.diffusemodel.stab_class
+        self.set_source(**source_kwargs)
+        self.gases = {k: v for k, v in gases.items()}
+        self.aer_absorp_feat = 1
+        
+    def set_source(
+        self, 
+        *,
+        circ_args:dict|None=None, 
+        x_src=None, 
+        y_src=None, 
+        q_src=1, 
+        He=None,
+        init=False
+    ):
+        if init:
+            self.diffuse.clear_source()
+        if circ_args is not None:
+            q_src, x_src, y_src = gen_fauntainsource(**circ_args)
+        
+        if (x_src is None) or (y_src is None) or (He is None):
+            raise ValueError('source "x" or "y" or "He" is not defined.')
 
-        self.lidar = Lidar(elevation=elevation)
+        self.diffuse.entry_source(q_src, x_src, y_src, He)
 
-        # self.wl = {"laser":np.arange(230, 370, 0.1)}
-        self.wl = {"laser": 300}
-        self.wl["N2_ST"] = utils.wl_shift(
-            self.wl["laser"], gases.at["N2", "sft"], False
+    def transmittance(self, lidar, wl):
+        # calc all absorptance
+        wl = np.atleast_1d(wl)
+        
+        absorptance_mol = alphas_mol(wl[np.newaxis, :], lidar.z_grid[:, np.newaxis])
+        absorptance_aer = alphas_aer(wl[np.newaxis, :], lidar.z_grid[:, np.newaxis], self.aer_absorp_feat)
+        absorptance_gas = {
+            name : obj.concentration[:, np.newaxis] * obj.cross_section(wl[np.newaxis, :]) 
+            for name, obj in self.gases.items()
+        }
+        absorptance = (
+                absorptance_mol
+                +absorptance_aer
+                +sum(absorptance_gas.values())
         )
-        self.wl["O2_ST"] = utils.wl_shift(
-            self.wl["laser"], gases.at["O2", "sft"], False
+
+        intgr = np.cumsum((absorptance[:-1, :]+absorptance[1:, :])*np.diff(lidar.distance)[:, np.newaxis]*0.5, axis=0)
+        transmittance = np.exp(-intgr)
+
+        fig, axes = plt.subplots(1,2)
+        for ax in axes:
+            ax.grid(which="major", ls="-", c="darkgrey")
+            ax.grid(which="minor", ls="--", c="lightgrey")
+            ax.set_xlabel("lidar distance [m]")
+            # ax.set_yscale("log")
+        
+        axes[0].scatter(lidar.distance, absorptance.ravel())
+        axes[1].scatter(lidar.distance[1:], transmittance.ravel())
+        axes[0].set_ylabel("absorptance")
+        axes[1].set_ylabel("transmittance")
+        plt.show(block=False)
+
+        return transmittance
+
+class Measurement:
+    def __init__(
+        self, 
+        env_kwargs, 
+        lidar_kwargs
+    ):
+        env_kwargs = dict(env_kwargs or {})
+        lidar_kwargs = dict(lidar_kwargs or {})
+
+        self.env = Enviroment(**env_kwargs)
+        self.lidar = Lidar(**lidar_kwargs)
+
+        self.C = self.env.diffuse.Concentration(
+            self.lidar.x_grid, z=self.lidar.z_grid, time_correction=10 * 60
         )
-        self.wl["N2_AS"] = utils.wl_shift(self.wl["laser"], gases.at["N2", "sft"], True)
-        self.wl["O2_AS"] = utils.wl_shift(self.wl["laser"], gases.at["O2", "sft"], True)
-
-        # self.wl_laser = np.arange(230, 370, 0.1)
-        # wl = {
-        #     "N2_ST" : utils.wl_shift(self.wl["laser"], gases.at["N2", "sft"], False),
-        #     "O2_ST" : utils.wl_shift(self.wl["laser"], gases.at["O2", "sft"], False),
-        #     "N2_AS" : utils.wl_shift(self.wl["laser"], gases.at["N2", "sft"], True),
-        #     "O2_AS" : utils.wl_shift(self.wl["laser"], gases.at["O2", "sft"], True),
-        # }
-
-        # self.wl_on  = np.zeros_like(self.wl_laser)
-        # self.wl_off = np.zeros_like(self.wl_laser)
-        # a = xs_SO2(self.wl["N2_ST"])
-        # b = xs_SO2(self.wl["O2_ST"])
-        # flg = a>b
-        # self.wl_on[flg]  = self.wl["N2_ST"][flg]
-        # self.wl_off[flg] = self.wl["O2_ST"][flg]
-        # self.wl_on[~flg]  = self.wl["O2_ST"][~flg]
-        # self.wl_off[~flg] = self.wl["N2_ST"][~flg]
-
+        for name, obj in self.env.gases.items():
+            obj.concentration = (obj.offset + obj.Q*self.C)*1e-6*N(self.lidar.z_grid)
+        
+        # =============================================================================
         self.wl = {"laser": 300}
         self.wl["N2_st"] = utils.wl_shift(
             self.wl["laser"], gases.at["N2", "sft"], False
@@ -132,44 +159,34 @@ class EnviromentModel:
         )
         self.wl["N2_as"] = utils.wl_shift(self.wl["laser"], gases.at["N2", "sft"], True)
         self.wl["O2_as"] = utils.wl_shift(self.wl["laser"], gases.at["O2", "sft"], True)
+        # ==============================================================================
 
-        self.gases = {}
-
-    def entry_source(self, radius, cnt, He):
-        x_src, y_src, q_src = gen_fauntainsource(radius=radius, cnt=cnt, N_pt=10)
-        self.diffusemodel.entry_source(q_src, x_src, y_src, He)
-        self.C = self.diffusemodel.Concentration(
-            self.lidar.x_grid, z=self.lidar.z_grid, time_correction=10 * 60
-        )
-
-    def entry_gases(self, name: str, Q: float, offset: float):
-        gas = Gases(Q=Q, offset=offset, distribution=Q * self.C + offset)
-        self.gases[name] = gas
-
-    def update_gases(self, *, name: str, Q=None, offset=None):
-        if Q is not None:
-            self.gases[name].Q = Q
-        if offset is not None:
-            self.gases[name].offset = offset
-
-        self.gases[name].distribution = (
-            self.gases[name].Q * self.C + self.gases[name].offset
-        )
-
-    def update_diffuse(
-        self, *, windspeed=None, wind_direction=None, wether=None, stab_class=None
+    def set_parameter(
+            self,
+            *, 
+            diffuse_kwargs=None,
+            source_kwargs=None,
+            gas_entry_dict:dict|None=None
     ):
-        self.diffusemodel.update_parameters(
-            windspeed=windspeed,
-            wind_direction=wind_direction,
-            wether=wether,
-            stab_class=stab_class,
+        if diffuse_kwargs is not None:
+            diffuse_kwargs = dict(diffuse_kwargs or {})
+            self.env.diffuse.update_parameters(**diffuse_kwargs)
+
+        if source_kwargs is not None:
+            source_kwargs = dict(source_kwargs or {})
+            self.env.set_source(**source_kwargs)
+
+        if gas_entry_dict is not None:
+            for k, v in gas_entry_dict.items():
+                self.gases = {k: v for k, v in gas_entry_dict.items()}
+
+        self.C = self.env.diffuse.Concentration(
+            self.lidar.x_grid, 
+            z=self.lidar.z_grid, 
+            time_correction=10 * 60
         )
-        self.C = self.diffusemodel.Concentration(
-            self.lidar.x_grid, z=self.lidar.z_grid, time_correction=10 * 60
-        )
-        for gas in self.gases.keys():
-            self.update_gases(name=gas)
+        for name, obj in self.env.gases.items():
+            obj.concentration = obj.offset + obj.Q*self.C
 
     def show_gases(self):
         fig = plt.figure()
@@ -184,17 +201,17 @@ class EnviromentModel:
         ax3.grid(which="minor", ls="--", c="lightgrey")
         ax3.grid(which="major", ls="-", c="darkgrey")
 
-        for name in self.gases.keys():
+        for key, obj in self.env.gases.items():
             ax1.scatter(
                 self.lidar.distance,
-                self.gases[name].distribution,
+                obj.concentration*1e6/N(self.lidar.z_grid),
                 clip_on=False,
-                label=name,
+                label=key,
             )
         r = np.linspace(self.lidar.distance.min(), self.lidar.distance.max(), 1000)
         ax2.plot(
             r,
-            self.diffusemodel.Concentration(r, time_correction=10 * 60),
+            self.env.diffuse.Concentration(r, z=self.lidar.alt_offset, time_correction=10 * 60),
             c="darkgrey",
             clip_on=False,
         )
@@ -207,7 +224,7 @@ class EnviromentModel:
         x = np.linspace(self.lidar.x_grid.min(), self.lidar.x_grid.max(), 200)
         y = np.linspace(-50, 50, 200)
         x, y = np.meshgrid(x, y)
-        C = self.diffusemodel.Concentration(x, y=y, z=0)
+        C = self.env.diffuse.Concentration(x, y=y, z=self.lidar.alt_offset)
         ax3.plot_wireframe(
             x,
             y,
@@ -225,109 +242,3 @@ class EnviromentModel:
         # plt.tight_layout()
         plt.show(block=False)
         # input("ENTER ANY KEY...")
-
-    def transmittance(self, scat1, scat2, dir1, dir2):
-        feat = 1
-        lb1 = f"{scat1}_{'AS' if dir1 else 'ST'}"
-        lb2 = f"{scat2}_{'AS' if dir2 else 'ST'}"
-
-        self.wl = {k: np.atleast_1d(v) for k, v in self.wl.items()}
-
-        alpha_mol_laser = alphas_mol(
-            self.wl["laser"][np.newaxis, :], self.lidar.z_grid[:, np.newaxis]
-        )
-        alpha_aer_laser = alphas_aer(
-            self.wl["laser"][np.newaxis, :], self.lidar.z_grid[:, np.newaxis], feat
-        )
-
-        alpha_mol_s1 = alphas_mol(
-            self.wl[lb1][np.newaxis, :], self.lidar.z_grid[:, np.newaxis]
-        )
-        alpha_aer_s1 = alphas_aer(
-            self.wl[lb1][np.newaxis, :], self.lidar.z_grid[:, np.newaxis], feat
-        )
-
-        alpha_mol_s2 = alphas_mol(
-            self.wl[lb2][np.newaxis, :], self.lidar.z_grid[:, np.newaxis]
-        )
-        alpha_aer_s2 = alphas_aer(
-            self.wl[lb2][np.newaxis, :], self.lidar.z_grid[:, np.newaxis], feat
-        )
-
-        alpha_SO2_laser = (
-            self.gases["SO2"].distribution[:, np.newaxis]
-            * xs_SO2(self.wl["laser"])[np.newaxis, :]
-        )
-        alpha_SO2_s1 = (
-            self.gases["SO2"].distribution[:, np.newaxis]
-            * xs_SO2(self.wl[lb1])[np.newaxis, :]
-        )
-        alpha_SO2_s2 = (
-            self.gases["SO2"].distribution[:, np.newaxis]
-            * xs_SO2(self.wl[lb2])[np.newaxis, :]
-        )
-
-        alpha_H2S_laser = (
-            self.gases["H2S"].distribution[:, np.newaxis]
-            * xs_H2S(self.wl["laser"])[np.newaxis, :]
-        )
-        alpha_H2S_s1 = (
-            self.gases["H2S"].distribution[:, np.newaxis]
-            * xs_H2S(self.wl[lb1])[np.newaxis, :]
-        )
-        alpha_H2S_s2 = (
-            self.gases["H2S"].distribution[:, np.newaxis]
-            * xs_H2S(self.wl[lb2])[np.newaxis, :]
-        )
-
-        alpha_O3_laser = (
-            self.gases["O3"].distribution[:, np.newaxis]
-            * xs_O3(self.wl["laser"])[np.newaxis, :]
-        )
-        alpha_O3_s1 = (
-            self.gases["O3"].distribution[:, np.newaxis]
-            * xs_O3(self.wl[lb1])[np.newaxis, :]
-        )
-        alpha_O3_s2 = (
-            self.gases["O3"].distribution[:, np.newaxis]
-            * xs_O3(self.wl[lb2])[np.newaxis, :]
-        )
-
-        alpha_laser = (
-            alpha_mol_laser
-            + alpha_aer_laser
-            + alpha_SO2_laser
-            + alpha_H2S_laser
-            + alpha_O3_laser
-        )
-        alpha_s1 = (
-            alpha_laser
-            + alpha_mol_s1
-            + alpha_aer_s1
-            + alpha_SO2_s1
-            + alpha_H2S_s1
-            + alpha_O3_s1
-        )
-        alpha_s2 = (
-            alpha_laser
-            + alpha_mol_s2
-            + alpha_aer_s2
-            + alpha_SO2_s2
-            + alpha_H2S_s2
-            + alpha_O3_s2
-        )
-
-        alpha_s1 = (
-            (alpha_s1[1:, :] + alpha_s1[:-1, :])
-            * np.diff(self.lidar.distance)[:, np.newaxis]
-            * 0.5
-        )
-        alpha_s2 = (
-            (alpha_s2[1:, :] + alpha_s2[:-1, :])
-            * np.diff(self.lidar.distance)[:, np.newaxis]
-            * 0.5
-        )
-        tau_scat1 = np.exp(-np.cumsum(alpha_s1, axis=0))
-        tau_scat2 = np.exp(-np.cumsum(alpha_s2, axis=0))
-
-        return tau_scat1, tau_scat2

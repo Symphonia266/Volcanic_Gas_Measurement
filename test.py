@@ -1,93 +1,110 @@
 # coding: utf-8
 import os
 import sys
+from gas_simulation.atom import alphas_mol
 import numpy as np
 from matplotlib import pyplot as plt
-from matplotlib.colors import LogNorm
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from gas_simulation.diffusion_model.diffuse_plume import DiffusePlumeLidar as DP
-from gas_simulation.model import MeasurementModel as MM
+from gas_simulation.atom import alphas_aer, alphas_mol
+from gas_simulation.model import Gas
+from gas_simulation.model import Measurement as Measure
+from gas_simulation import utils
 
-windspeed = 2
-stab_class = "A"
-model = MM(windspeed=windspeed, wind_direction=45, elevation=0, stab_class=stab_class)
-model.entry_source(radius=5, cnt=(50, -20), He=2)
-model.entry_gases("SO2", 2.5 * 1e4, 0.0)
-model.entry_gases("H2S", 1.0 * 1e4, 0.0)
-model.entry_gases("O3", 0.0, 0.005)
+samp = utils.load_cross_section(
+    "SO2_VandaeleHermansFally(2009)_358K_227.275-416.658nm.xlsx",
+    interp_kwargs={"bounds_error": False, "fill_value": np.nan},
+)
+
+xs_SO2 = utils.load_cross_section(
+    "SO2_VandaeleHermansFally(2009)_358K_227.275-416.658nm.xlsx",
+    interp_kwargs={"bounds_error": False, "fill_value": np.nan},
+    effective=True,
+)
+xs_H2S = utils.load_cross_section(
+    "H2S_Grosch(2015)_423.2K_198-370nm.xlsx",
+    interp_kwargs={"bounds_error": False, "fill_value": np.nan},
+    effective=True,
+)
+xs_O3 = utils.load_cross_section(
+    "O3_Bogumil(2003)_293K_230-1070nm.xlsx",
+    interp_kwargs={"bounds_error": False, "fill_value": np.nan},
+    effective=True,
+)
+
+# 半径5mの真円煙源を有効煙源高度2mでセット
+model = Measure(
+    env_kwargs={
+        # diffuse detail
+        "windspeed":2, 
+        "wind_direction":90, 
+        "stab_class":"A",
+
+        # source detail
+        "source_kwargs":{
+            "circ_args": {
+                "radius":5, 
+                "cnt":(50, -10), 
+                "N_pt":25
+            },
+            "He":1002,
+        },
+
+        # eruption gas details 
+        "gases":{
+            "SO2" : Gas(Q=4e4 , offset=0.0   , cross_section=xs_SO2),
+            "H2S" : Gas(Q=2e4 , offset=0.0   , cross_section=xs_H2S),
+            "O3"  : Gas(Q=0   , offset=0.0005, cross_section=xs_SO2),
+        },
+        
+    }, 
+    lidar_kwargs={
+        "end":100,
+        "elevation":0,
+        "alt_offset":1000,
+    }
+)
+model.show_gases()
+tau = model.env.transmittance(model.lidar, 300)
+
+
+# 煙源の水平位置を変えて再計算
+model.set_parameter(
+    source_kwargs={
+        "circ_args": {
+            "radius":5, 
+            "cnt":(50, -50), 
+            "N_pt":25
+        },
+        "He":1002,
+        "init":True
+    }
+)
 model.show_gases()
 
-model.diffusemodel.clear_source()
-model.entry_source(radius=5, cnt=(50, -40), He=2)
-model.update_diffuse(windspeed=windspeed, wind_direction=90, stab_class=stab_class)
-model.show_gases()
+# # 煙流拡散条件を変えて再計算
+# model.set_parameter(
+#     diffuse_kwargs={
+#         "windspeed":10,
+#         "wind_direction":90
+#     }
+# )
+# model.show_gases()
+
+# # 点煙源に変えて再計算
+# model.set_parameter(
+#     diffuse_kwargs={
+#         "wind_direction":90
+#     },
+#     source_kwargs={
+#         "x_src":30,
+#         "y_src":-40,
+#         "He":2,
+#         "init":True
+#     },
+# )
+# model.show_gases()
+tau = model.env.transmittance(model.lidar, 300)
+
 input("ENTER ANY KEY......")
-
-tau1, tau2 = model.transmittance("N2", "O2", False, False)
-# ...existing code...
-
-# --- transmittance の簡易テスト（smoke test）---
-import inspect
-
-print("\n--- transmittance smoke test ---")
-if hasattr(model, "transmittance"):
-    try:
-        sig = inspect.signature(model.transmittance)
-        print("transmittance signature:", sig)
-
-        # まずよくある呼び出し方 (scat1, scat2, dir1, dir2) を試す
-        try:
-            res = model.transmittance("O2", "N2", False, True)
-            # 返り値がタプルなら各要素の shape を表示
-            if isinstance(res, tuple):
-                print("transmittance returned tuple of length", len(res))
-                for i, r in enumerate(res):
-                    try:
-                        print(f"  [{i}] shape: {np.asarray(r).shape}")
-                    except Exception:
-                        print(f"  [{i}] type:", type(r))
-            else:
-                print(
-                    "transmittance returned:",
-                    type(res),
-                    "shape:",
-                    np.asarray(res).shape,
-                )
-        except Exception as e1:
-            print("call (scat1,scat2,dir1,dir2) failed:", repr(e1))
-
-            # フォールバック: ranges と wl スタイルで試す
-            ranges = np.linspace(1.0, 100.0, 50)
-            wl_try = None
-            if hasattr(model, "wl"):
-                # model.wl が dict なら laser を使う
-                try:
-                    wl_arr = np.atleast_1d(
-                        model.wl.get("laser", list(model.wl.values())[0])
-                    )
-                    # 適当に代表波長を抽出（長さが大きければ間引く）
-                    wl_try = float(wl_arr[len(wl_arr) // 2])
-                except Exception:
-                    wl_try = None
-
-            if wl_try is not None:
-                try:
-                    res2 = model.transmittance(ranges, wl_try)
-                    print(
-                        "transmittance(ranges, wl) succeeded; return type:",
-                        type(res2),
-                        "shape:",
-                        np.asarray(res2).shape,
-                    )
-                except Exception as e2:
-                    print("fallback call (ranges,wl) failed:", repr(e2))
-            else:
-                print("no suitable wl found for fallback call")
-    except Exception as e:
-        print("introspection/call failed:", repr(e))
-else:
-    print("model has no attribute 'transmittance'")
-
-# ...existing code...

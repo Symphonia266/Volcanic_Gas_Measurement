@@ -71,11 +71,13 @@ class Gases:
 class Transmittance:
     def __init__(self, lidar, wl):
         feat = 1
-        alpha["mol"] = alphas_mol(wl, lidar.z_grid)
-        alpha["aer"] = alphas_aer(wl, lidar.z_grid, feat)
-        alpha["SO2"] = lambda r, wl: n_SO2(r) * xs_SO2(wl)
-        alpha["H2S"] = lambda r, wl: n_H2S(r) * xs_SO2(wl)
-        alpha["O3"] = lambda r, wl: n_O3(r) * xs_SO2(wl)
+        alpha = {
+            "mol": alphas_mol(wl, lidar.z_grid),
+            "aer": alphas_aer(wl, lidar.z_grid, feat),
+            "SO2": lambda r, wl: n_SO2(r) * xs_SO2(wl),
+            "H2S": lambda r, wl: n_H2S(r) * xs_SO2(wl),
+            "O3": lambda r, wl: n_O3(r) * xs_SO2(wl),
+        }
 
 
 class EnviromentModel:
@@ -91,9 +93,6 @@ class EnviromentModel:
         self.stab_class = self.diffusemodel.stab_class
 
         self.lidar = Lidar(elevation=elevation)
-        print(self.lidar.distance)
-        print(self.lidar.x_grid)
-        print(self.lidar.z_grid)
 
         # self.wl = {"laser":np.arange(230, 370, 0.1)}
         self.wl = {"laser": 300}

@@ -14,7 +14,7 @@ from .func import correct_time
 
 
 class DiffusePlume:
-    def __init__(self, model, windspeed, *, wether=None, stab_class=None):
+    def __init__(self, windspeed, *, wether=None, stab_class=None, model="pasquill"):
         if model == "pasquill":
             self.model = PasquillSpread()
         if model == "sutton":
@@ -34,7 +34,7 @@ class DiffusePlume:
         self.sources = pd.DataFrame(columns=["Q", "x", "y", "z"], dtype=float)
 
     def update_parameters(
-        self, *, model=None, windspeed=None, wether=None, stab_class=None
+        self, *, windspeed=None, wether=None, stab_class=None, model=None, 
     ):
         if model is not None:
             if model == "pasquill":
@@ -185,9 +185,9 @@ class DiffusePlumeLidar(DiffusePlume):
     """
 
     def __init__(
-        self, model, windspeed, wind_direction_deg, *, wether=None, stab_class=None
+        self, windspeed, wind_direction_deg, *, wether=None, stab_class=None, model="pasquill"
     ):
-        super().__init__(model, windspeed, wether=wether, stab_class=stab_class)
+        super().__init__(windspeed=windspeed, wether=wether, stab_class=stab_class, model=model)
         self.wind_direction = np.deg2rad(wind_direction_deg)
         # self.elevation = np.deg2rad(elevation)
 
@@ -201,7 +201,7 @@ class DiffusePlumeLidar(DiffusePlume):
         stab_class=None,
     ):
         super().update_parameters(
-            model=model, windspeed=windspeed, wether=wether, stab_class=stab_class
+            windspeed=windspeed, wether=wether, stab_class=stab_class, model=model,
         )
         if wind_direction is not None:
             self.wind_direction = np.deg2rad(wind_direction)

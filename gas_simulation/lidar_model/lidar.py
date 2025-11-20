@@ -23,6 +23,8 @@ class Lidar:
         self.distance = np.arange(0, end, dR)
         self.dR = dR
         self.elevation = elevation
+        self.alt_offset = alt_offset
+        
         self.x_grid = self.distance * np.cos(np.deg2rad(elevation))
         self.z_grid = self.distance * np.sin(np.deg2rad(elevation)) + alt_offset
 

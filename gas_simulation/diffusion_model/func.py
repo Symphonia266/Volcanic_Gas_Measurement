@@ -13,4 +13,4 @@ def gen_fauntainsource(radius, cnt, N_pt):
     x = x[mask].flatten()
     y = y[mask].flatten()
     q = 1 / mask.sum()
-    return x+x0, y+y0, q
+    return q, x+x0, y+y0

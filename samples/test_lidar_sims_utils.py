@@ -6,15 +6,15 @@ import matplotlib.pyplot as plt
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from gas_simulation.lidar_simulation.utils import gaus
-from gas_simulation.lidar_simulation.utils import effective
-from gas_simulation.lidar_simulation.utils import load_cross_section
+from gas_simulation.utils import gaus
+from gas_simulation.utils import effective
+from gas_simulation.utils import load_cross_section
 
 x = np.linspace(-2, 2, 1000)
 y = gaus(x, mean=0, FWHM=1, normalize="peak")
 y = y/y.sum()
 
-t = np.linspace(-100, 100, 1000)
+t = np.linspace(-100, 100, 1000)[:, np.newaxis, np.newaxis]
 freq1 = 1/40
 freq2 = 4
 
@@ -29,8 +29,8 @@ for ax in axes:
 axes[0].plot(x, y)
 axes[0].set_xlabel("X")
 axes[0].set_ylabel("Y")
-axes[1].plot(t, I, label="inst")
-axes[1].plot(t, I_eff, label="eff")
+axes[1].plot(t.ravel(), I.ravel(), label="inst")
+axes[1].plot(t.ravel(), I_eff.ravel(), label="eff")
 axes[1].set_xlabel("Time")
 axes[1].set_ylabel("Intensity")
 axes[1].legend()

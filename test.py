@@ -37,33 +37,26 @@ xs_O3 = utils.load_cross_section(
 model = Measure(
     env_kwargs={
         # diffuse detail
-        "windspeed":2, 
-        "wind_direction":90, 
-        "stab_class":"A",
-
+        "windspeed": 2,
+        "wind_direction": 90,
+        "stab_class": "A",
         # source detail
-        "source_kwargs":{
-            "circ_args": {
-                "radius":5, 
-                "cnt":(50, -10), 
-                "N_pt":25
-            },
-            "He":1002,
+        "source_kwargs": {
+            "circ_args": {"radius": 5, "cnt": (50, -10), "N_pt": 25},
+            "He": 1002,
         },
-
-        # eruption gas details 
-        "gases":{
-            "SO2" : Gas(Q=4e4 , offset=0.0   , cross_section=xs_SO2),
-            "H2S" : Gas(Q=2e4 , offset=0.0   , cross_section=xs_H2S),
-            "O3"  : Gas(Q=0   , offset=0.0005, cross_section=xs_SO2),
+        # eruption gas details
+        "gases": {
+            "SO2": Gas(Q=4e4, offset=0.0, cross_section=xs_SO2),
+            "H2S": Gas(Q=2e4, offset=0.0, cross_section=xs_H2S),
+            "O3": Gas(Q=0, offset=0.0005, cross_section=xs_O3),
         },
-        
-    }, 
+    },
     lidar_kwargs={
-        "end":100,
-        "elevation":0,
-        "alt_offset":1000,
-    }
+        "end": 100,
+        "elevation": 0,
+        "alt_offset": 1000,
+    },
 )
 model.show_gases()
 tau = model.env.transmittance(model.lidar, 300)
@@ -72,25 +65,26 @@ tau = model.env.transmittance(model.lidar, 300)
 # 煙源の水平位置を変えて再計算
 model.set_parameter(
     source_kwargs={
-        "circ_args": {
-            "radius":5, 
-            "cnt":(50, -50), 
-            "N_pt":25
-        },
-        "He":1002,
-        "init":True
+        "circ_args": {"radius": 5, "cnt": (50, -50), "N_pt": 25},
+        "He": 1002,
+        "init": True,
     }
 )
 model.show_gases()
+tau = model.env.transmittance(model.lidar, 300)
 
 # # 煙流拡散条件を変えて再計算
 # model.set_parameter(
-#     diffuse_kwargs={
-#         "windspeed":10,
-#         "wind_direction":90
-#     }
+#     diffuse_kwargs={"windspeed": 10, "wind_direction": 90, "wether": "overcast"},
+#     gas_entry_dict={
+#         "SO2": Gas(Q=8e4, offset=0.0, cross_section=xs_SO2),
+#         "H2S": Gas(Q=4e4, offset=0.0, cross_section=xs_H2S),
+#         "O3": Gas(Q=0, offset=0.0005, cross_section=xs_SO2),
+#     },
 # )
+# print(model.env.diffuse.stab_class)
 # model.show_gases()
+# tau = model.env.transmittance(model.lidar, 300)
 
 # # 点煙源に変えて再計算
 # model.set_parameter(
@@ -105,6 +99,5 @@ model.show_gases()
 #     },
 # )
 # model.show_gases()
-tau = model.env.transmittance(model.lidar, 300)
 
 input("ENTER ANY KEY......")

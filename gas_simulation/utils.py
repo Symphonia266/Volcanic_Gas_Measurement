@@ -2,7 +2,9 @@ import numpy as np
 import pandas as pd
 from scipy import constants as const
 from scipy.interpolate import interp1d
+
 from . import package_path, data_dir, data_file
+from .consts import gases
 
 
 def nu(wl):
@@ -71,6 +73,11 @@ def wl_shift(wl, sft, dir: bool, *, inv: bool = False):
     """
     sign = -1 if inv else 1
     return trans_wn_wl(trans_wn_wl(wl) + sign * (sft if dir else -sft))
+
+def gen_conbi(wl, scat1, scat2, dir1, dir2):
+    wl_s1 = wl_shift(wl, gases.at[scat1, "sft"], dir1)
+    wl_s2 = wl_shift(wl, gases.at[scat2, "sft"], dir2)
+    return wl_s1, wl_s2
 
 
 def ratio_ASTK(

@@ -1,7 +1,5 @@
 # coding: utf-8
 import numpy as np
-import pandas as pd
-from matplotlib import pyplot as plt
 from tqdm import tqdm
 
 from .pasquill_stable_classfication import (
@@ -13,144 +11,188 @@ from .sutton_model.sutton_spreadwidth import SpreadWidth as SuttonSpread
 from .func import correct_time
 
 
-class DiffusePlume:
-    def __init__(self, windspeed, *, wether=None, stab_class=None, model="pasquill"):
-        if model == "pasquill":
-            self.model = PasquillSpread()
-        if model == "sutton":
-            pass
-            # self.model = SuttonSpread(windspeed, wether, stab_class)
+def plume_kernel(
+    x, 
+    y, 
+    z, 
+    q,
+    He, 
+    model:PasquillSpread, 
+    stab_class:str, 
+    windspeed:float,
+    *,
+    time:float|None=None
+):
+    """
+    Gaussian plume calculation kernel for multiple sources (vectorized).
+    
+    Parameters
+    ----------
+    x, y, z : array-like
+        Grid coordinates, can be broadcastable shapes.
+        Last dimension corresponds to sources.
+    Q : array-like
+        Source emission rates (same length as number of sources).
+    He : array-like
+        Effective source heights (same length as number of sources).
+    model : PasquillSpread
+        Lateral/vertical spread model.
+    stab_class : str
+        Atmospheric stability class.
+    windspeed : float
+        Wind speed at source.
+    time : float, optional
+        Time correction factor. Defaults to None.
+    
+    Returns
+    -------
+    C : np.ndarray
+        Concentration at grid points (same shape as x, y, z excluding sources dimension)
+    """
+    x = np.atleast_1d(x)
+    y = np.atleast_1d(y)
+    z = np.atleast_1d(z)
+    x, y, z = np.broadcast_arrays(x, y, z)
+    C = np.zeros_like(x, dtype=float)
 
-        self.windspeed = windspeed
-        if stab_class != None:
-            self.wether = inverse_stab_class_to_wether(windspeed, stab_class)
-            self.stab_class = stab_class
-        elif wether != None:
-            self.wether = wether
-            self.stab_class = classify_atomosphere_stability(windspeed, wether)
-        else:
-            raise ValueError("ERROR : wether or stability class are empty")
+            
+    mask = x > 0
+    sigma_y = model.lateral(x[mask], stab_class)
+    sigma_z = model.vertical(x[mask], stab_class)
 
-        self.sources = pd.DataFrame(columns=["Q", "x", "y", "z"], dtype=float)
+    # --- windspeed correction ---
+    if time is not None:
+        windspeed = windspeed * time
+        sigma_y = correct_time(time, sigma_y)
+        sigma_z = correct_time(time, sigma_z)
+    else: windspeed = windspeed * 3 * 60
+    
+    if mask.any():
+        C[mask] = (
+            q / 
+            (2 * np.pi * sigma_y * sigma_z * windspeed) * 
+            np.exp(-(y[mask] ** 2) / (2 * sigma_y**2)) * 
+            (
+                np.exp(-((z[mask] - He) ** 2) / (2 * sigma_z**2)) +
+                np.exp(-((z[mask] + He) ** 2) / (2 * sigma_z**2))
+            )
+        )
+    return C
 
-    def update_parameters(
-        self, *, windspeed=None, wether=None, stab_class=None, model=None, 
+class Field:
+    """
+    Represents an atmospheric field with wind speed, stability, and spread model.
+    """
+    def __init__(
+            self, 
+            windspeed, 
+            *, 
+            weather=None, 
+            stab_class=None, 
+            diffuse_model="pasquill"
     ):
-        if model is not None:
-            if model == "pasquill":
-                self.model = PasquillSpread()
-            if model == "sutton":
-                pass
-            # self.model = SuttonSpread(windspeed, wether, stab_class)
+        self.windspeed = windspeed
 
+        if      diffuse_model == "pasquill" : self.spread = PasquillSpread()
+        # elif    diffuse_model == "sutton"   : self.spread = SuttonSpread()
+        else: raise ValueError("Unknown model")
+
+        if stab_class is not None:
+            self.stab_class = stab_class
+            self.weather = inverse_stab_class_to_wether(windspeed, stab_class)
+        elif weather is not None:
+            self.weather = weather
+            self.stab_class = classify_atomosphere_stability(windspeed, weather)
+
+        else: raise ValueError("Need weather or stab_class")
+
+    def update(
+            self, 
+            *, 
+            windspeed=None, 
+            wind_direction_deg=None, 
+            weather=None, 
+            stab_class=None
+        ):
         if windspeed is not None:
             self.windspeed = windspeed
+        if wind_direction_deg is not None:
+            self.wind_direction = np.deg2rad(wind_direction_deg)
         if stab_class is not None:
-            self.wether = inverse_stab_class_to_wether(windspeed, stab_class)
             self.stab_class = stab_class
-        elif wether is not None:
-            self.wether = wether
-            self.stab_class = classify_atomosphere_stability(windspeed, wether)
+            self.weather = inverse_stab_class_to_wether(self.windspeed, stab_class)
+        elif weather is not None:
+            self.weather = weather
+            self.stab_class = classify_atomosphere_stability(self.windspeed, weather)
 
-    def entry_source(self, Q, x, y, He):
+class Source:
+    """
+    Represents a collection of point sources.
+    Stores [Q, x, y, He] in a 4xN ndarray.
+    """
+    def __init__(self, Q=None, x=None, y=None, He=None):
+        self.profile = np.zeros((0,4), dtype=float)
+        if (
+            Q is not None and 
+            x is not None and 
+            y is not None and 
+            He is not None
+        ):
+            self.add(Q,x,y,He)
+
+    def add(self, Q, x, y, He):
+        # 配列化
         Q = np.atleast_1d(Q)
         x = np.atleast_1d(x)
         y = np.atleast_1d(y)
         He = np.atleast_1d(He)
+        
+        assert len(Q) == len(x) == len(y) == len(He), "All inputs must have the same length"
+        
+        new = np.column_stack([Q, x, y, He])
+        self.profile = np.vstack([self.profile, new])
 
-        # 各配列の長さを確認
-        lengths = np.array([Q.size, x.size, y.size, He.size])
-        max_len = np.max(lengths)
-        min_len = np.min(lengths)
 
-        def expand(v):
-            return np.full(max_len, v[0]) if len(v) == 1 else v
+    def clear(self):
+        self.profile=np.zeros((0, 4), dtype=float)
 
-        # 長さが不一致の場合（ブロードキャスト可能か確認）
-        if max_len != min_len:
-            # ブロードキャストできる条件：スカラー（長さ1）が混ざっている場合のみ
-            if not np.all((lengths == 1) | (lengths == max_len)):
-                raise ValueError(
-                    f"Inconsistent array lengths: Q={len(Q)}, x={len(x)}, y={len(y)}, He={len(He)}"
-                )
-            # スカラーをブロードキャスト（長さmax_lenに拡張）
-            else:
-                Q, x, y, He = map(expand, (Q, x, y, He))
+class DiffusePlume:
+    def __init__(
+        self, 
+        field:Field, 
+        source:Source
+    ):
+        self.field = field
+        self.source = source
 
-        source = pd.DataFrame(
-            {
-                "Q": np.atleast_1d(Q),  # 放出強度
-                "x": np.atleast_1d(x),  # 煙源X座標
-                "y": np.atleast_1d(y),  # 煙源Y座標
-                "He": np.atleast_1d(He),  # 有効煙源高度
-            },
-            dtype=float,
-        )
-        self.sources = pd.concat([self.sources, source], ignore_index=True)
+    def Concentration(self, x, y, z, *, time=None):
 
-    def clear_source(self):
-        self.sources = pd.DataFrame(columns=["Q", "x", "y", "He"], dtype=float)
+        x = np.atleast_1d(x)
+        y = np.atleast_1d(y)
+        z = np.atleast_1d(z)
+        x, y, z = np.broadcast_arrays(x, y, z)
+        C_total = np.zeros_like(x)
 
-    def Concentration(self, x_in, y_in, z_in, *, time_correction=None):
-        x = np.asarray(x_in)
-        y = np.asarray(y_in)
-        z = np.asarray(z_in)
-
-        # if "x", "y", and "z" are not gridpoint
-        if (x.shape == y.shape) and (y.shape == z.shape):
-            C_i = np.empty_like(x, dtype=float)
-            C_total = np.zeros_like(x, dtype=float)
-        else:
-            C_i = np.empty((x.size, y.size, z.size), dtype=float)
-            C_total = np.zeros((x.size, y.size, z.size), dtype=float)
-            # reshape them for broadcast
-            if x.ndim == 1:
-                x = x[:, np.newaxis, np.newaxis]
-            if y.ndim == 1:
-                y = y[np.newaxis, :, np.newaxis]
-            if z.ndim == 1:
-                z = z[np.newaxis, np.newaxis, :]
-
-        if time_correction is not None:
-            windspeed = self.windspeed * time_correction
-        else:
-            windspeed = self.windspeed * 3 * 60
-
-        for i, source in tqdm(
-            self.sources.iterrows(),
-            total=self.sources.shape[0],
+        for q, x_src, y_src, He in tqdm(
+            self.source.profile,
+            total=self.source.profile.shape[0],
             desc="Intergrate all fauntains",
             bar_format="[{desc}, Remaining {remaining}] {percentage:3.1f}% ({elapsed}) |{bar:20}| [{n}/{total}, {rate_fmt}]",
         ):
-            x = x - source["x"]
-            y = y - source["y"]
-
-            # mask points downwind of the source (x relative to source > 0)
-            mask = x > 0
-            # compute spread widths only at masked (downwind) points
-            sigma_y = self.model.lateral(x[mask], self.stab_class)
-            sigma_z = self.model.vertical(x[mask], self.stab_class)
-
-            if time_correction:
-                Q = source["Q"] * time_correction
-                sigma_y = correct_time(time_correction, sigma_y)
-                sigma_z = correct_time(time_correction, sigma_z)
-            else:
-                Q = source["Q"] * 3 * 60
-
-            # build concentration only at masked indices so RHS length matches mask.sum()
-            C_i_mask = (
-                Q
-                / (2 * np.pi * sigma_y * sigma_z * windspeed)
-                * np.exp(-(y[mask] ** 2) / (2 * sigma_y**2))
-                * (
-                    np.exp(-((z[mask] + source["He"]) ** 2) / (2 * sigma_z**2))
-                    + np.exp(-((z[mask] - source["He"]) ** 2) / (2 * sigma_z**2))
-                )
+            # --- Compute concentration ---
+            C_total += plume_kernel(
+                x=x-x_src, 
+                y=y-y_src, 
+                z=z, 
+                q=q, 
+                He=He,
+                model=self.field.spread,
+                stab_class=self.field.stab_class,
+                windspeed=self.field.windspeed,
+                time=time
             )
-            C_i[mask] = C_i_mask
-            C_i[~mask] = 0
-            C_total += C_i
+
+            # --- Sum contributions from all sources ---
         return C_total
 
 
@@ -178,92 +220,51 @@ def lidar_to_plume(x, y, z, origin, azim):
     return x_p, y_p, z_p
 
 
-class DiffusePlumeLidar(DiffusePlume):
+class DiffusePlumeLidar():
     """
     ライダー座標系で濃度計算を行うための上位互換クラス。
     内部で風向角に基づきモデル座標へ変換して DiffusePlume に委譲する。
     """
 
     def __init__(
-        self, windspeed, wind_direction_deg, *, wether=None, stab_class=None, model="pasquill"
+        self, 
+        field:Field,
+        wind_direction_deg:float, 
+        source:Source,
     ):
-        super().__init__(windspeed=windspeed, wether=wether, stab_class=stab_class, model=model)
+        self.field = field
+        self.source = source
         self.wind_direction = np.deg2rad(wind_direction_deg)
-        # self.elevation = np.deg2rad(elevation)
 
-    def update_parameters(
-        self,
-        *,
-        model=None,
-        windspeed=None,
-        wind_direction=None,
-        wether=None,
-        stab_class=None,
-    ):
-        super().update_parameters(
-            windspeed=windspeed, wether=wether, stab_class=stab_class, model=model,
-        )
-        if wind_direction is not None:
-            self.wind_direction = np.deg2rad(wind_direction)
 
-        # self.elevation = np.deg2rad(elevation)
+    def Concentration(self, x, y, z, *, time=None):
 
-    def Concentration(self, x, *, y=0, z=0, time_correction=None):
         x = np.atleast_1d(x)
         y = np.atleast_1d(y)
         z = np.atleast_1d(z)
-
-        # --- broadcast arrays so all shapes match ---
         x, y, z = np.broadcast_arrays(x, y, z)
-        C_total = np.zeros_like(x, dtype=float)
+        C_total = np.zeros_like(x)
 
-        # --- windspeed correction ---
-        if time_correction is not None:
-            windspeed = self.windspeed * time_correction
-        else:
-            windspeed = self.windspeed * 3 * 60
-
-        for i, source in tqdm(
-            self.sources.iterrows(),
-            total=self.sources.shape[0],
+        for q, x_src, y_src, He in tqdm(
+            self.source.profile,
+            total=self.source.profile.shape[0],
             desc="Intergrate all fauntains",
             bar_format="[{desc}, Remaining {remaining}] {percentage:3.1f}% ({elapsed}) |{bar:20}| [{n}/{total}, {rate_fmt}]",
         ):
-            # use the broadcasted grid arrays so shapes of x_p, y_p, z_p match
-            x_p, y_p, z_p = lidar_to_plume(
-                x,
-                y,
-                z,
-                [source["x"], source["y"], 0],
-                self.wind_direction,
+
+            # --- Compute concentration ---
+            x_p, y_p, z_p = lidar_to_plume(x, y, z, [x_src, y_src, 0], self.wind_direction)
+            C_total += plume_kernel(
+                x=x_p, 
+                y=y_p, 
+                z=z_p, 
+                q=q, 
+                He=He,
+                model=self.field.spread,
+                stab_class=self.field.stab_class,
+                windspeed=self.field.windspeed,
+                time=time
             )
-            mask = x_p > 0
 
-            # compute spread widths only at downwind points
-            sigma_y = np.zeros_like(x_p)
-            sigma_z = np.zeros_like(x_p)
-            sigma_y[mask] = self.model.lateral(x_p[mask], self.stab_class)
-            sigma_z[mask] = self.model.vertical(x_p[mask], self.stab_class)
-
-            if time_correction:
-                Q = source["Q"] * time_correction
-                sigma_y[mask] = correct_time(time_correction, sigma_y[mask])
-                sigma_z[mask] = correct_time(time_correction, sigma_z[mask])
-            else:
-                Q = source["Q"] * 3 * 60
-
-            C = np.zeros_like(x_p, dtype=float)
-            C[mask] = (
-                Q
-                / (2 * np.pi * sigma_y[mask] * sigma_z[mask] * windspeed)
-                * np.exp(-(y_p[mask] ** 2) / (2 * sigma_y[mask] ** 2))
-                * (
-                    np.exp(-((z_p[mask] - source["He"]) ** 2) / (2 * sigma_z[mask] ** 2))
-                    + np.exp(
-                        -((z_p[mask] + source["He"]) ** 2) / (2 * sigma_z[mask] ** 2)
-                    )
-                )
-            )
-            C_total += C
-
+            # --- Sum contributions from all sources ---
         return C_total

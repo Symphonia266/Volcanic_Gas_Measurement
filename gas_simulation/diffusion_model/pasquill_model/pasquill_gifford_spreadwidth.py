@@ -171,8 +171,6 @@ class SpreadWidth:
             ]
             self.func_vertical[lb] = create_funcs_to_connect(x, y, self.interval_vertical[lb])
 
-
-
     def lateral(self, x, lb):
         xx = np.asarray(x)
         y = connect_smoothly_multi(

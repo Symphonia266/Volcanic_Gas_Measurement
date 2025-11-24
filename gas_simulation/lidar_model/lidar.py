@@ -10,7 +10,7 @@ class Lidar:
     def __init__(
         self,
         *,
-        end=100,
+        end:float=100,
         dR: float = 5,
         elevation=0,
         alt_offset=1,
@@ -38,7 +38,7 @@ class Lidar:
         # self.D = D
 
     def power(self, wl, beta, tau):
-        dist = np.atleast_1d(self.distance)[:, np.newaxis]
+        dist = np.atleast_1d(self.distance)[1:, np.newaxis]
         wl = np.atleast_1d(wl)[np.newaxis, :]
 
         t1 = (
@@ -58,14 +58,18 @@ class Lidar:
         return t1 * beta * tau
 
 
-class DIAL:
-    def __init__(self, lidar, p_on, p_off, d_xs):
+class Dial:
+    def __init__(self, lidar, dR):
         self.lidar = lidar
-        self.distance = (lidar.distance[1:] + lidar.distance[:-1]) / 2
-        self.p_on = p_on
-        self.p_off = p_off
-        self.d_xs = d_xs
+        self.dR = dR[:, np.newaxis]
+        self.distance = (lidar.distance[2:] + lidar.distance[1:-1]) / 2
+        self.x_grid = (lidar.x_grid[2:] + lidar.x_grid[1:-1]) / 2
+        self.z_grid = (lidar.z_grid[2:] + lidar.z_grid[1:-1]) / 2
 
-    def concentration(self):
-
-        return
+    def concentration(self, p_on, p_off, d_xs):
+        res = np.log(
+            (p_on[:-1, :]/p_on[1:, :]) * 
+            (p_off[1:, :]/p_off[:-1, :])
+        )
+        res /= (self.dR * d_xs)
+        return res

@@ -11,7 +11,7 @@ from .sutton_model.sutton_spreadwidth import SpreadWidth as SuttonSpread
 from .func import correct_time
 
 
-def plume_kernel(
+def plume(
     x, 
     y, 
     z, 
@@ -79,124 +79,7 @@ def plume_kernel(
         )
     return C
 
-class Field:
-    """
-    Represents an atmospheric field with wind speed, stability, and spread model.
-    """
-    def __init__(
-            self, 
-            windspeed, 
-            *, 
-            weather=None, 
-            stab_class=None, 
-            diffuse_model="pasquill"
-    ):
-        self.windspeed = windspeed
-
-        if      diffuse_model == "pasquill" : self.spread = PasquillSpread()
-        # elif    diffuse_model == "sutton"   : self.spread = SuttonSpread()
-        else: raise ValueError("Unknown model")
-
-        if stab_class is not None:
-            self.stab_class = stab_class
-            self.weather = inverse_stab_class_to_wether(windspeed, stab_class)
-        elif weather is not None:
-            self.weather = weather
-            self.stab_class = classify_atomosphere_stability(windspeed, weather)
-
-        else: raise ValueError("Need weather or stab_class")
-
-    def update(
-            self, 
-            *, 
-            windspeed=None, 
-            wind_direction_deg=None, 
-            weather=None, 
-            stab_class=None
-        ):
-        if windspeed is not None:
-            self.windspeed = windspeed
-        if wind_direction_deg is not None:
-            self.wind_direction = np.deg2rad(wind_direction_deg)
-        if stab_class is not None:
-            self.stab_class = stab_class
-            self.weather = inverse_stab_class_to_wether(self.windspeed, stab_class)
-        elif weather is not None:
-            self.weather = weather
-            self.stab_class = classify_atomosphere_stability(self.windspeed, weather)
-
-class Source:
-    """
-    Represents a collection of point sources.
-    Stores [Q, x, y, He] in a 4xN ndarray.
-    """
-    def __init__(self, Q=None, x=None, y=None, He=None):
-        self.profile = np.zeros((0,4), dtype=float)
-        if (
-            Q is not None and 
-            x is not None and 
-            y is not None and 
-            He is not None
-        ):
-            self.add(Q,x,y,He)
-
-    def add(self, Q, x, y, He):
-        # 配列化
-        Q = np.atleast_1d(Q)
-        x = np.atleast_1d(x)
-        y = np.atleast_1d(y)
-        He = np.atleast_1d(He)
-        
-        assert len(Q) == len(x) == len(y) == len(He), "All inputs must have the same length"
-        
-        new = np.column_stack([Q, x, y, He])
-        self.profile = np.vstack([self.profile, new])
-
-
-    def clear(self):
-        self.profile=np.zeros((0, 4), dtype=float)
-
-class DiffusePlume:
-    def __init__(
-        self, 
-        field:Field, 
-        source:Source
-    ):
-        self.field = field
-        self.source = source
-
-    def Concentration(self, x, y, z, *, time=None):
-
-        x = np.atleast_1d(x)
-        y = np.atleast_1d(y)
-        z = np.atleast_1d(z)
-        x, y, z = np.broadcast_arrays(x, y, z)
-        C_total = np.zeros_like(x)
-
-        for q, x_src, y_src, He in tqdm(
-            self.source.profile,
-            total=self.source.profile.shape[0],
-            desc="Intergrate all fauntains",
-            bar_format="[{desc}, Remaining {remaining}] {percentage:3.1f}% ({elapsed}) |{bar:20}| [{n}/{total}, {rate_fmt}]",
-        ):
-            # --- Compute concentration ---
-            C_total += plume_kernel(
-                x=x-x_src, 
-                y=y-y_src, 
-                z=z, 
-                q=q, 
-                He=He,
-                model=self.field.spread,
-                stab_class=self.field.stab_class,
-                windspeed=self.field.windspeed,
-                time=time
-            )
-
-            # --- Sum contributions from all sources ---
-        return C_total
-
-
-def lidar_to_plume(x, y, z, origin, azim):
+def rotate(x, y, z, origin, azim):
     """
     ライダー座標系 -> 風下座標系
     x, y, z : ライダー座標系の座標 (array-like)
@@ -219,25 +102,122 @@ def lidar_to_plume(x, y, z, origin, azim):
     z_p = dz  # zはそのまま
     return x_p, y_p, z_p
 
-
-class DiffusePlumeLidar():
+class Field:
     """
-    ライダー座標系で濃度計算を行うための上位互換クラス。
-    内部で風向角に基づきモデル座標へ変換して DiffusePlume に委譲する。
+    Represents an atmospheric field with wind speed, stability, and spread model.
     """
+    def __init__(
+            self, 
+            windspeed, 
+            *, 
+            weather=None, 
+            stab_class=None, 
+            diffuse_model="pasquill", 
+            wind_direction_deg = 0
+    ):
+        self.windspeed = windspeed
+        self.wind_direction = np.deg2rad(wind_direction_deg)
 
+        if      diffuse_model == "pasquill" : self.spread = PasquillSpread()
+        # elif    diffuse_model == "sutton"   : self.spread = SuttonSpread()
+        else: raise ValueError("Unknown model")
+
+        if stab_class is not None:
+            self.stab_class = stab_class
+            self.weather = inverse_stab_class_to_wether(windspeed, stab_class)
+        elif weather is not None:
+            self.weather = weather
+            self.stab_class = classify_atomosphere_stability(windspeed, weather)
+
+        else: raise ValueError("Need weather or stab_class")
+
+    def update(
+            self, 
+            *, 
+            windspeed=None, 
+            weather=None, 
+            stab_class=None,
+            wind_direction_deg=None, 
+        ):
+        if windspeed is not None:
+            self.windspeed = windspeed
+        if wind_direction_deg is not None:
+            self.wind_direction = np.deg2rad(wind_direction_deg)
+        if stab_class is not None:
+            self.stab_class = stab_class
+            self.weather = inverse_stab_class_to_wether(self.windspeed, stab_class)
+        elif weather is not None:
+            self.weather = weather
+            self.stab_class = classify_atomosphere_stability(self.windspeed, weather)
+
+class Source:
+    """
+    Represents a collection of point sources.
+    Stores all sources in a numpy array of shape (N,4) for [Q, x, y, He].
+    
+    Implements __iter__ to allow:
+        for q, x, y, He in source:
+            ...
+    """
+    def __init__(self, Q=None, x=None, y=None, He=None):
+        self._profile = np.zeros((0,4), dtype=float)
+        if (
+            Q is not None and 
+            x is not None and 
+            y is not None and 
+            He is not None
+        ): 
+            self.add(Q, x, y, He)
+
+    def add(self, Q, x, y, He):
+        # 配列化
+        Q = np.atleast_1d(Q)
+        x = np.atleast_1d(x)
+        y = np.atleast_1d(y)
+        He = np.atleast_1d(He)
+        
+        if not (len(Q) == len(x) == len(y) == len(He)):
+            raise ValueError("All inputs must have the same length")
+        
+        new = np.column_stack([Q, x, y, He])
+        self._profile = np.vstack([self._profile, new])
+
+    def clear(self):
+        self._profile = np.zeros((0,4), dtype=float)
+
+    def __len__(self):
+        return self._profile.shape[0]
+
+    def __iter__(self):
+        """
+        Yield q, x, y, He for each source for convenient unpacking.
+        """
+        for row in self._profile:
+            yield tuple(row)
+
+    @property
+    def profile(self):
+        """
+        Expose underlying numpy array (read-only recommended)
+        """
+        return self._profile
+        
+
+class PlumeModel:
     def __init__(
         self, 
-        field:Field,
-        wind_direction_deg:float, 
-        source:Source,
+        field:Field, 
+        source:Source
     ):
         self.field = field
         self.source = source
-        self.wind_direction = np.deg2rad(wind_direction_deg)
 
-
-    def Concentration(self, x, y, z, *, time=None):
+    def concentration(
+        self, 
+        x, y, z, 
+        *, 
+        time=None
+    ):
 
         x = np.atleast_1d(x)
         y = np.atleast_1d(y)
@@ -246,15 +226,17 @@ class DiffusePlumeLidar():
         C_total = np.zeros_like(x)
 
         for q, x_src, y_src, He in tqdm(
-            self.source.profile,
-            total=self.source.profile.shape[0],
-            desc="Intergrate all fauntains",
+            self.source,
+            total=len(self.source),
+            desc="Integrate all eruptions",
             bar_format="[{desc}, Remaining {remaining}] {percentage:3.1f}% ({elapsed}) |{bar:20}| [{n}/{total}, {rate_fmt}]",
         ):
-
-            # --- Compute concentration ---
-            x_p, y_p, z_p = lidar_to_plume(x, y, z, [x_src, y_src, 0], self.wind_direction)
-            C_total += plume_kernel(
+            x_p, y_p, z_p = rotate(
+                x, y, z, 
+                origin=[x_src, y_src, 0], 
+                azim=self.field.wind_direction
+            )
+            C_total += plume(
                 x=x_p, 
                 y=y_p, 
                 z=z_p, 
@@ -266,5 +248,4 @@ class DiffusePlumeLidar():
                 time=time
             )
 
-            # --- Sum contributions from all sources ---
         return C_total

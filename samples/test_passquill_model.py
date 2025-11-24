@@ -1,5 +1,4 @@
 import sys
-from matplotlib.pylab import imshow
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -21,8 +20,7 @@ from gas_simulation.diffusion_model.pasquill_model.pasquill_gifford_spreadwidth 
 from gas_simulation.diffusion_model.diffuse_plume import (
     Field, 
     Source, 
-    DiffusePlume, 
-    DiffusePlumeLidar
+    PlumeModel, 
 )
 # from diffusion_model.sutton_model.sutton_spreadwidth import SpreadWidth as SuttonSpread
 
@@ -86,11 +84,11 @@ q, x_src, y_src = gen_fauntainsource(radius=3, cnt=[50, 30], N_pt=5)
 He = np.full_like(q, 2)
 source = Source(q, x_src, y_src, He)
 
-model = DiffusePlume(field, source)
+model = PlumeModel(field, source)
 x = np.linspace(0, 100, 100)[np.newaxis, :]
 y = np.linspace(-50, 50, 100)[:, np.newaxis]
 z = np.array([0])
-C = model.Concentration(x, y, z)
+C = model.concentration(x, y, z)
 
 fig2, ax2 = plt.subplots()
 im = ax2.imshow(
@@ -109,16 +107,24 @@ plt.show(block=False)
 
 # =====================================================================
 
-field = Field(2, weather="clear")
+field = Field(2, weather="clear", wind_direction_deg=90)
 q, x_src, y_src = gen_fauntainsource(radius=5, cnt=[50, -30], N_pt=10)
 He = np.full_like(q, 2)
 source = Source(q, x_src, y_src, He)
-model = DiffusePlumeLidar(field, 90, source)
+model = PlumeModel(field, source)
 
 x = np.linspace(0, 100, 250)[np.newaxis, :]
 y = np.linspace(-50, 50, 250)[:, np.newaxis]
 z = np.array([0])
-C = model.Concentration(x, y, z)
+C = model.concentration(x, y, z)
+
+fig = plt.figure()
+ax = fig.add_subplot(111, projection="3d", aspect="equal")
+ax.scatter(x_src, y_src, He, c=q)
+ax.set_xlim(x.min(), x.max())
+ax.set_ylim(y.min(), y.max())
+ax.set_zlim(0, 10)
+plt.show(block=False)
 
 fig, ax = plt.subplots(1,1)
 im = ax.imshow(

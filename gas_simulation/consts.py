@@ -11,7 +11,7 @@ r_O2_raman: float = 1.4
 s_raman_O2:float = s_raman_N2 * r_O2_raman
 """ Cross-section of absorption for Raman scattering by O2 [m^2] """
 
-gases: pd.DataFrame = pd.DataFrame.from_dict(
+main_gases_props: pd.DataFrame = pd.DataFrame.from_dict(
     {
         "N2": [28.01, 2331, 0.7811, 0.7553, s_raman_N2],
         "O2": [32.00, 1556, 0.2096, 0.2314, 1.4 * s_raman_N2],

@@ -4,8 +4,14 @@ from scipy import constants as const
 from scipy.interpolate import interp1d
 
 from . import package_path, data_dir, data_file
-from .consts import gases
+from .consts import main_gases_props
+from .atom import N
 
+def ppm_to_nubmer_density(ppm, alt):
+    return ppm * 1e-6 * N(alt)
+
+def number_density_to_ppm(n, alt):
+    return n * 1e6 / N(alt)
 
 def nu(wl):
     """the frequency[Hz] by a wavelength [nm]
@@ -335,3 +341,22 @@ def load_cross_section_dict(mapping, *, interp_kwargs=None, **read_kwargs):
         k: load_cross_section(v, interp_kwargs=interp_kwargs, **read_kwargs) 
         for k, v in mapping.items()
     }
+
+class Subject:
+    """変更通知機能を持つ Subject"""
+    def __init__(self, *args, **kwargs):
+        self._observers = []
+        super().__init__(*args, **kwargs)
+
+    def attach(self, observer):
+        if observer not in self._observers:
+            self._observers.append(observer)
+
+    def detach(self, observer):
+        if observer in self._observers:
+            self._observers.remove(observer)
+
+    def notify(self):
+        """登録されているすべての Observer に通知"""
+        for obs in self._observers:
+            obs.update(self)

@@ -1,6 +1,6 @@
 import numpy as np
 from . import package_path
-from .consts import gases, s_raman_N2, s_raman_O2
+from .consts import main_gases_props, s_raman_N2, s_raman_O2
 
 def N(z):
     """atmosphere number density of molecules [m-3]"""
@@ -31,10 +31,10 @@ def betas_aer(wl, feat, z):
     return Aero(wl, z) * np.power((710 / wl), feat)
 
 def betas_N2(alt):
-    return N(alt)*gases.at["N2", "mol-weight"]*s_raman_N2
+    return N(alt)*main_gases_props.at["N2", "mol-weight"]*s_raman_N2
 
 def betas_O2(alt):
-    return N(alt)*gases.at["O2", "mol-weight"]*s_raman_O2
+    return N(alt)*main_gases_props.at["O2", "mol-weight"]*s_raman_O2
 
 
 def alphas_mol(wl, alt):

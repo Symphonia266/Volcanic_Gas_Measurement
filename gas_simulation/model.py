@@ -1,6 +1,7 @@
 # coding: utf-8
 import os
 import sys
+from turtle import up
 import numpy as np
 import pandas as pd
 
@@ -21,6 +22,7 @@ from .diffusion_model.func import gen_fauntainsource
 from .diffusion_model.diffuse_plume import Field as BaseField
 from .diffusion_model.diffuse_plume import Source as BaseSource
 from .diffusion_model.diffuse_plume import PlumeModel
+from gas_simulation.lidar_model import lidar
 
 class Field(utils.Subject, BaseField):
     def __init__(
@@ -66,10 +68,10 @@ class Gas():
         self.Q = Q
         self.offset = offset
         self.cross_section = cross_section
-        self.concentration: np.ndarray = np.array([])
 
-    def update(self, C, z_grid):
-        self.concentration = utils.ppm_to_nubmer_density((self.offset + self.Q * C), z_grid)
+    def concentration(self, C):
+        return self.offset + self.Q * C
+    
 class Environment:
     def __init__(
             self, 
@@ -83,7 +85,7 @@ class Environment:
         self.source = source
         self.plume_model = PlumeModel(self.field, self.source)
 
-        self.gases = {k:obj for k, obj in gas.items()}
+        self.gas_profile = {k:obj for k, obj in gas.items()}
         self.lidar = lidar
 
         self.time = time
@@ -91,26 +93,17 @@ class Environment:
         # 監視対象に登録
         self.field.attach(self)
         self.source.attach(self)
-        self.calc()
-
         self.aer_absorp_feat = 1
 
-        # =============================================================================
-        # ==============================================================================
-
-    def calc(self):
-        self.C = self.plume_model.concentration(
-            self.lidar.x_grid, 
-            0, 
-            self.lidar.z_grid, 
-            time=self.time
-        )
-        for obj in self.gases.values(): obj.update(self.C, self.lidar.z_grid)
+    def distribution(self, x, y, z):
+        C = self.plume_model.concentration(x, y, z, time=self.time)
+        gas = {name: utils.ppm_to_number_density(obj.concentration(C), z) for name, obj in self.gas_profile.items()}
+        return gas
 
     def update(self, subject):
         """Field または Source から呼ばれる更新メソッド"""
         print(f"{subject} changed, recalculating plume...")
-        self.calc()
+        self.gas = self.distribution(self.lidar.x_grid, 0, self.lidar.z_grid)
 
     def transmittance(self, wl):
         # calc all absorptance
@@ -125,9 +118,11 @@ class Environment:
             self.lidar.z_grid[:, np.newaxis], 
             self.aer_absorp_feat
         )
+        n_gas = self.distribution(self.lidar.x_grid, 0, self.lidar.z_grid)
         absorptance_gas = {
-            name : obj.concentration[:, np.newaxis]* obj.cross_section(wl[np.newaxis, :])
-            for name, obj in self.gases.items()
+            name : 
+            n_gas[name][:, np.newaxis] * obj.cross_section(wl)[np.newaxis, :]
+            for name, obj in self.gas_profile.items()
         }
 
         absorptance = absorptance_mol + absorptance_aer + sum(absorptance_gas.values())
@@ -168,16 +163,17 @@ class Environment:
         ax3.grid(which="minor", ls="--", c="lightgrey")
         ax3.grid(which="major", ls="-", c="darkgrey")
 
-        for key, obj in self.gases.items():
+        gas = self.distribution(self.lidar.x_grid, 0, self.lidar.z_grid)
+        for name, n_gas in gas.items():
             ax1.scatter(
                 self.lidar.distance,
-                utils.number_density_to_ppm(obj.concentration, self.lidar.z_grid),
+                utils.number_density_to_ppm(n_gas, self.lidar.z_grid),
                 clip_on=False,
-                label=key,
+                label=name,
            )
         ax2.plot(
             self.lidar.distance,
-            self.C,
+            self.plume_model.concentration(self.lidar.x_grid, 0, self.lidar.z_grid, time=self.time),
             c="darkgrey",
             clip_on=False,
         )

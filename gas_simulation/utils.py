@@ -7,7 +7,7 @@ from . import package_path, data_dir, data_file
 from .consts import main_gases_props
 from .atom import N
 
-def ppm_to_nubmer_density(ppm, alt):
+def ppm_to_number_density(ppm, alt):
     return ppm * 1e-6 * N(alt)
 
 def number_density_to_ppm(n, alt):

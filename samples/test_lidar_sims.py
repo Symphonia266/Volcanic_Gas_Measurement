@@ -1,9 +1,5 @@
 # coding: utf-8
-from calendar import c
-import os
-from re import X
 import sys
-from tkinter import N
 import numpy as np
 from pathlib import Path
 from matplotlib import pyplot as plt
@@ -117,7 +113,7 @@ res = dial.concentration(p_on, p_off, dial.dR[:, np.newaxis], d_xs_SO2[np.newaxi
 idx_300nm = np.searchsorted(wl_laser, 300)
 print(utils.number_density_to_ppm(res[:, idx_300nm], dial.z_grid))
 
-fig, axes = plt.subplots(1,2)
+fig, axes = plt.subplots(1,2, layout="constrained")
 axes[0].plot(env.lidar.distance[1:], tau_on[:, idx_300nm],  c ="red",   ls="-",  label="on")
 axes[0].plot(env.lidar.distance[1:], tau_off[:, idx_300nm], c ="blue",  ls="-",  label="off")
 # axes[0].plot(env.lidar.distance[1:], tau_N2[:, idx_300nm],  c ="orange",ls="--", label="N2")
@@ -141,7 +137,7 @@ for ax in axes:
 
 plt.show(block=False)
 
-fig, axes = plt.subplots(1,2)
+fig, axes = plt.subplots(1,2, layout="constrained")
 axes[0].plot(wl_laser, tau_on[9,  :],  c ="red",   ls="-",  label="on")
 axes[0].plot(wl_laser, tau_off[9, :], c ="blue",  ls="-",  label="off")
 # axes[0].plot(wl_laser, tau_N2[9, :],  c ="orange",ls="--", label="N2")

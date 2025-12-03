@@ -134,7 +134,7 @@ class Environment:
             axis=0,
         )
         transmittance = np.exp( -intgr )
-        fig, axes = plt.subplots(1, 2)
+        fig, axes = plt.subplots(1, 2, layout="constrained")
         for ax in axes:
             ax.grid(which="major", ls="-", c="darkgrey")
             ax.grid(which="minor", ls="--", c="lightgrey")
@@ -151,7 +151,7 @@ class Environment:
         return transmittance
       
     def show_gases(self):
-        fig = plt.figure()
+        fig = plt.figure(layout="constrained")
         ax1 = fig.add_subplot(1, 2, 1)
         ax2 = ax1.twinx()
         ax3 = fig.add_subplot(1, 2, 2)

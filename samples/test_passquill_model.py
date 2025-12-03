@@ -3,7 +3,9 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from matplotlib import pyplot as plt
-
+from matplotlib import cm 
+from matplotlib import gridspec
+from matplotlib import colors
 # プロジェクトルートを sys.path に追加
 # __file__ = samples/a.py
 project_root = Path(__file__).resolve().parent.parent
@@ -143,4 +145,69 @@ plt.show(block=False)
 
 # ====================================================================
 
+
+x = np.linspace(0, 100, 50)
+y = np.linspace(-50, 50, 50)
+z = np.linspace(0, 30, 50)
+X, Y, Z = np.meshgrid(x, y, z, indexing="xy")
+
+field = Field(2, weather="clear", wind_direction_deg=0)
+q, x_src, y_src = gen_fauntainsource(radius=5, cnt=[0, 0], N_pt=10)
+He = np.full_like(q, 10)
+source = Source(q, x_src, y_src, He)
+model = PlumeModel(field, source)
+
+C1 = model.concentration(X, Y, Z)
+X1 = X[C1>1e-6]
+Y1 = Y[C1>1e-6]
+Z1 = Z[C1>1e-6]
+C1 = C1[C1>1e-6]
+C1_norm = (C1-C1.min())/(C1.max()-C1.min())
+colors1 = cm.jet(C1_norm)
+colors1[...,-1] = C1_norm
+
+model.field.update(windspeed=10, stab_class="D")
+C2 = model.concentration(X, Y, Z)
+X2 = X[C2>1e-6]
+Y2 = Y[C2>1e-6]
+Z2 = Z[C2>1e-6]
+C2 = C2[C2>1e-6]
+C2_norm = (C2-C2.min())/(C2.max()-C2.min())
+colors2 = cm.jet(C2_norm)
+colors2[...,-1] = C2_norm
+
+fig = plt.figure()
+gs = gridspec.GridSpec(
+    2, 2,
+    width_ratios=[9, 1],   # 左にプロット、右にカラーバー
+    height_ratios=[1, 1],  # 上下等分
+    wspace=0.0,           # 左右の余白最小
+    hspace=0.05             # 上下の余白ゼロ
+)
+ax1 = fig.add_subplot(gs[0, 0], projection="3d")
+ax2 = fig.add_subplot(gs[1, 0], projection="3d")
+cax = fig.add_subplot(gs[:, 1])
+
+sc1 = ax1.scatter(X1, Y1, Z1, c=colors1.reshape(-1,4))
+sc2 = ax2.scatter(X2, Y2, Z2, c=colors2.reshape(-1,4))
+
+# ---- カラーバー ----
+fig.colorbar(sc1, cmap="jet", cax=cax,label="Concentration", orientation='vertical')
+# fig.colorbar(sc2, cax=cax, label="Concentration", orientation='vertical')
+
+
+for ax in [ax1, ax2]:
+    # ax.set_box_aspect([1,1,0.2])
+    ax.set_xlim(x.min(), x.max())
+    ax.set_ylim(y.min(), y.max())
+    ax.set_zlim(z.min(), z.max())
+    ax.view_init(elev=5, azim=-110)
+    ax.view_init(elev=5, azim=-110)
+    ax.set_xlabel("downwind distance [m]")
+    ax.set_ylabel("lateral [m]")
+    ax.set_zlabel("vertical [m]")
+
+# ---- 余白を完全にゼロへ ----
+# fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
+plt.show(block=False)
 input("ENTER ANY KEY")

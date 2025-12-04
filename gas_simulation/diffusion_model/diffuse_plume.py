@@ -12,20 +12,20 @@ from .func import correct_time
 
 
 def plume(
-    x, 
-    y, 
-    z, 
+    x,
+    y,
+    z,
     q,
-    He, 
-    model:PasquillSpread, 
-    stab_class:str, 
-    windspeed:float,
+    He,
+    model: PasquillSpread,
+    stab_class: str,
+    windspeed: float,
     *,
-    time:float|None=None
+    time: float | None = None,
 ):
     """
     Gaussian plume calculation kernel for multiple sources (vectorized).
-    
+
     Parameters
     ----------
     x, y, z : array-like
@@ -43,7 +43,7 @@ def plume(
         Wind speed at source.
     time : float, optional
         Time correction factor. Defaults to None.
-    
+
     Returns
     -------
     C : np.ndarray
@@ -55,7 +55,6 @@ def plume(
     x, y, z = np.broadcast_arrays(x, y, z)
     C = np.zeros_like(x, dtype=float)
 
-            
     mask = x > 0
     sigma_y = model.lateral(x[mask], stab_class)
     sigma_z = model.vertical(x[mask], stab_class)
@@ -65,19 +64,21 @@ def plume(
         windspeed = windspeed * time
         sigma_y = correct_time(time, sigma_y)
         sigma_z = correct_time(time, sigma_z)
-    else: windspeed = windspeed * 3 * 60
-    
+    else:
+        windspeed = windspeed * 3 * 60
+
     if mask.any():
         C[mask] = (
-            q / 
-            (2 * np.pi * sigma_y * sigma_z * windspeed) * 
-            np.exp(-(y[mask] ** 2) / (2 * sigma_y**2)) * 
-            (
-                np.exp(-((z[mask] - He) ** 2) / (2 * sigma_z**2)) +
-                np.exp(-((z[mask] + He) ** 2) / (2 * sigma_z**2))
+            q
+            / (2 * np.pi * sigma_y * sigma_z * windspeed)
+            * np.exp(-(y[mask] ** 2) / (2 * sigma_y**2))
+            * (
+                np.exp(-((z[mask] - He) ** 2) / (2 * sigma_z**2))
+                + np.exp(-((z[mask] + He) ** 2) / (2 * sigma_z**2))
             )
         )
     return C
+
 
 def rotate(x, y, z, origin, azim):
     """
@@ -102,25 +103,29 @@ def rotate(x, y, z, origin, azim):
     z_p = dz  # zはそのまま
     return x_p, y_p, z_p
 
+
 class Field:
     """
     Represents an atmospheric field with wind speed, stability, and spread model.
     """
+
     def __init__(
-            self, 
-            windspeed, 
-            *, 
-            weather=None, 
-            stab_class=None, 
-            diffuse_model="pasquill", 
-            wind_direction_deg = 0
+        self,
+        windspeed,
+        *,
+        weather=None,
+        stab_class=None,
+        diffuse_model="pasquill",
+        wind_direction_deg=0,
     ):
         self.windspeed = windspeed
         self.wind_direction = np.deg2rad(wind_direction_deg)
 
-        if      diffuse_model == "pasquill" : self.spread = PasquillSpread()
+        if diffuse_model == "pasquill":
+            self.spread = PasquillSpread()
         # elif    diffuse_model == "sutton"   : self.spread = SuttonSpread()
-        else: raise ValueError("Unknown model")
+        else:
+            raise ValueError("Unknown model")
 
         if stab_class is not None:
             self.stab_class = stab_class
@@ -129,16 +134,17 @@ class Field:
             self.weather = weather
             self.stab_class = classify_atomosphere_stability(windspeed, weather)
 
-        else: raise ValueError("Need weather or stab_class")
+        else:
+            raise ValueError("Need weather or stab_class")
 
     def update(
-            self, 
-            *, 
-            windspeed=None, 
-            weather=None, 
-            stab_class=None,
-            wind_direction_deg=None, 
-        ):
+        self,
+        *,
+        windspeed=None,
+        weather=None,
+        stab_class=None,
+        wind_direction_deg=None,
+    ):
         if windspeed is not None:
             self.windspeed = windspeed
         if wind_direction_deg is not None:
@@ -150,23 +156,20 @@ class Field:
             self.weather = weather
             self.stab_class = classify_atomosphere_stability(self.windspeed, weather)
 
+
 class Source:
     """
     Represents a collection of point sources.
     Stores all sources in a numpy array of shape (N,4) for [Q, x, y, He].
-    
+
     Implements __iter__ to allow:
         for q, x, y, He in source:
             ...
     """
+
     def __init__(self, Q=None, x=None, y=None, He=None):
-        self._profile = np.zeros((0,4), dtype=float)
-        if (
-            Q is not None and 
-            x is not None and 
-            y is not None and 
-            He is not None
-        ): 
+        self._profile = np.zeros((0, 4), dtype=float)
+        if Q is not None and x is not None and y is not None and He is not None:
             self.add(Q, x, y, He)
 
     def add(self, Q, x, y, He):
@@ -175,15 +178,15 @@ class Source:
         x = np.atleast_1d(x)
         y = np.atleast_1d(y)
         He = np.atleast_1d(He)
-        
+
         if not (len(Q) == len(x) == len(y) == len(He)):
             raise ValueError("All inputs must have the same length")
-        
+
         new = np.column_stack([Q, x, y, He])
         self._profile = np.vstack([self._profile, new])
 
     def clear(self):
-        self._profile = np.zeros((0,4), dtype=float)
+        self._profile = np.zeros((0, 4), dtype=float)
 
     def __len__(self):
         return self._profile.shape[0]
@@ -201,23 +204,14 @@ class Source:
         Expose underlying numpy array (read-only recommended)
         """
         return self._profile
-        
+
 
 class PlumeModel:
-    def __init__(
-        self, 
-        field:Field, 
-        source:Source
-    ):
+    def __init__(self, field: Field, source: Source):
         self.field = field
         self.source = source
 
-    def concentration(
-        self, 
-        x, y, z, 
-        *, 
-        time=None
-    ):
+    def calc(self, x, y, z, *, time=None):
 
         x = np.atleast_1d(x)
         y = np.atleast_1d(y)
@@ -232,20 +226,18 @@ class PlumeModel:
             bar_format="[{desc}, Remaining {remaining}] {percentage:3.1f}% ({elapsed}) |{bar:20}| [{n}/{total}, {rate_fmt}]",
         ):
             x_p, y_p, z_p = rotate(
-                x, y, z, 
-                origin=[x_src, y_src, 0], 
-                azim=self.field.wind_direction
+                x, y, z, origin=[x_src, y_src, 0], azim=self.field.wind_direction
             )
             C_total += plume(
-                x=x_p, 
-                y=y_p, 
-                z=z_p, 
-                q=q, 
+                x=x_p,
+                y=y_p,
+                z=z_p,
+                q=q,
                 He=He,
                 model=self.field.spread,
                 stab_class=self.field.stab_class,
                 windspeed=self.field.windspeed,
-                time=time
+                time=time,
             )
 
         return C_total

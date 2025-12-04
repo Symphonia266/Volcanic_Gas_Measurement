@@ -43,7 +43,7 @@ field = Field(windspeed=2, stab_class="A", wind_direction_deg=90)
 
 # 半径5mの真円煙源を有効煙源高度2mでセット
 q, x_src, y_src = gen_fauntainsource(radius=5, cnt=[50, -10], N_pt=30)
-He = np.full_like(q, 2 + lidar.alt_offset)
+He = np.full_like(q, 2 + lidar.coord.z0)
 source = Source(Q=q, x=x_src, y=y_src, He=He)
 
 # シミュレーション環境をセッティング
@@ -57,27 +57,26 @@ env = PlumeEnvironment(
     },
     time=10 * 60,
 )
-env.show_gases(lidar)
-tau = env.transmittance(lidar.distance, lidar.x_grid, lidar.z_grid, 300)
+env.show_gases(lidar.coord)
+tau = env.transmittance(lidar.coord, 300, show=True)
 
 env.source.clear()
 q, x_src, y_src = gen_fauntainsource(radius=5, cnt=[50, -21.5], N_pt=30)
-He = np.full_like(q, 2 + lidar.alt_offset)
+He = np.full_like(q, 2 + lidar.coord.z0)
 env.source.add(q, x_src, y_src, He)
-env.show_gases(lidar)
-tau = env.transmittance(lidar.distance, lidar.x_grid, lidar.z_grid, 300)
+env.show_gases(lidar.coord)
+tau = env.transmittance(lidar.coord, 300, show=True)
 
 
 env.field.update(wind_direction_deg=0)
 env.source.clear()
 q, x_src, y_src = gen_fauntainsource(radius=5, cnt=[-10, 0], N_pt=30)
-He = np.full_like(q, 2 + lidar.alt_offset)
+He = np.full_like(q, 2 + lidar.coord.z0)
 env.source.add(q, x_src, y_src, He)
-env.show_gases(lidar)
-tau = env.transmittance(lidar.distance, lidar.x_grid, lidar.z_grid, 300)
+env.show_gases(lidar.coord)
+tau = env.transmittance(lidar.coord, 300, show=True)
 
 env.field.update(windspeed=10, weather="overcast")
-env.show_gases(lidar)
-tau = env.transmittance(lidar.distance, lidar.x_grid, lidar.z_grid, 300)
-
+env.show_gases(lidar.coord)
+tau = env.transmittance(lidar.coord, 300, show=True)
 input("ENTER ANY KEY......")

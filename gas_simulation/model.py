@@ -1,7 +1,9 @@
 # coding: utf-8
+from calendar import c
 import os
 from re import X
 import sys
+from turtle import distance
 import numpy as np
 import pandas as pd
 
@@ -23,7 +25,7 @@ from .diffusion_model.func import gen_fauntainsource
 from .diffusion_model.diffuse_plume import Field
 from .diffusion_model.diffuse_plume import Source
 from .diffusion_model.diffuse_plume import PlumeModel
-from .lidar_model.lidar import rotate, Lidar
+from .lidar_model.lidar import Coord, Lidar
 
 __all__ = [
     "Field",
@@ -62,49 +64,55 @@ class PlumeEnvironment:
         }
         return gas
 
-    def transmittance(self, distance, x, z, wl):
-        # calc all absorptance
-        wl = np.atleast_1d(wl)
+    def transmittance(self, coord:Coord, wl:float|np.ndarray, *, show=False):
+        x_tmp, z_tmp = coord.get_xz(0)
+        distance = np.append(0,     coord.distance)
+        x        = np.append(x_tmp, coord.x       )
+        z        = np.append(z_tmp, coord.z       )
 
-        absorptance_mol = alphas_mol(
-            wl[np.newaxis, :], z[:, np.newaxis]
-        )
-        absorptance_aer = alphas_aer(
-            wl[np.newaxis, :], z[:, np.newaxis], self.aer_absorp_feat
-        )
+        distance = np.atleast_1d(distance)[:, np.newaxis]
+        x = np.atleast_1d(x)[:, np.newaxis]
+        z = np.atleast_1d(z)[:, np.newaxis]
+        wl = np.atleast_1d(wl)[np.newaxis, :]
+
+        absorptance_mol = alphas_mol(wl, z)
+        absorptance_aer = alphas_aer(wl, z, self.aer_absorp_feat)
         n_gas = self.number_density_at(x, 0, z)
+        # for name, obj in self.gas_inventory.items():
+        #     a = n_gas[name]
+        #     b = obj.cross_section(wl)
+        #     print(f"{name:>5}: n_gas shape: {a.shape}, cross-sec shape: {b.shape}")
         absorptance_gas = {
-            name: n_gas[name][:, np.newaxis] * obj.cross_section(wl)[np.newaxis, :]
+            name: n_gas[name] * obj.cross_section(wl)
             for name, obj in self.gas_inventory.items()
         }
 
         absorptance = absorptance_mol + absorptance_aer + sum(absorptance_gas.values())
 
         intgr = np.cumsum(
-            (absorptance[:-1, :] + absorptance[1:, :])
-            * np.diff(distance)[:, np.newaxis]
+            (absorptance[:-1] + absorptance[1:])
+            * np.diff(distance, axis=0)
             * 0.5,
             axis=0,
         )
         transmittance = np.exp(-intgr)
-        fig, axes = plt.subplots(1, 2)
-        for ax in axes:
-            ax.grid(which="major", ls="-", c="darkgrey")
-            ax.grid(which="minor", ls="--", c="lightgrey")
-            ax.set_xlabel("lidar distance [m]")
-            # ax.set_yscale("log")
-        idx = np.searchsorted(wl, 300)
-        axes[0].scatter(distance,       absorptance[:, idx])
-        axes[1].scatter(distance[1:],   transmittance[:, idx])
-        axes[0].set_ylabel("absorptance")
-        axes[1].set_ylabel("transmittance")
-        axes[0].set_ylim(0, None)
-        axes[1].set_ylim(0, 1)
-        plt.show(block=False)
-
+        if show:
+            fig, axes = plt.subplots(1, 2)
+            for ax in axes:
+                ax.grid(which="major", ls="-", c="darkgrey")
+                ax.grid(which="minor", ls="--", c="lightgrey")
+                ax.set_xlabel("lidar distance [m]")
+                # ax.set_yscale("log")
+            axes[0].scatter(distance,       absorptance[:, 0])
+            axes[1].scatter(coord.distance, transmittance[:, 0])
+            axes[0].set_ylabel("absorptance")
+            axes[1].set_ylabel("transmittance")
+            axes[0].set_ylim(0, None)
+            axes[1].set_ylim(0, 1)
+            plt.show(block=False)
         return transmittance
 
-    def show_gases(self, lidar):
+    def show_gases(self, coord:Coord):
         fig = plt.figure()
         ax1 = fig.add_subplot(1, 2, 1)
         ax2 = ax1.twinx()
@@ -117,19 +125,19 @@ class PlumeEnvironment:
         ax3.grid(which="minor", ls="--", c="lightgrey")
         ax3.grid(which="major", ls="-", c="darkgrey")
 
-        gas = self.number_density_at(lidar.x_grid, 0, lidar.z_grid)
+        gas = self.number_density_at(coord.x, 0, coord.z)
         p1 = []
         for name, n in gas.items():
             p = ax1.scatter(
-                lidar.distance,
-                utils.number_density_to_ppm(n, lidar.z_grid),
+                coord.distance,
+                utils.number_density_to_ppm(n, coord.z),
                 clip_on=False,
                 label=name,
             )
             p1.append(p)
-        r = np.linspace(lidar.distance.min(), lidar.distance.max(), 200)
-        x = np.linspace(lidar.x_grid.min(),   lidar.x_grid.max(), 200)
-        z = np.linspace(lidar.z_grid.min(),   lidar.z_grid.max(), 200)
+        r = np.linspace(coord.distance.min(), coord.distance.max(), 200)
+        x = np.linspace(coord.x.min(),   coord.x.max(), 200)
+        z = np.linspace(coord.z.min(),   coord.z.max(), 200)
         C = self.plume_model.calc(x, 0, z, time=self.time)
         p2 = ax2.plot(r, C / C.max(), c="darkgrey", clip_on=False, label="plume-coeff.")
         ax1.set_xlabel("distance [m]")
@@ -140,11 +148,11 @@ class PlumeEnvironment:
         ax1.legend(handles=[*p1, *p2])
 
         # ax3.view_init(elev=20, azim=-155)
-        y = np.linspace(-lidar.x_grid.max() / 2, lidar.x_grid.max() / 2, 200)
+        y = np.linspace(-coord.x.max() / 2, coord.x.max() / 2, 200)
         C = self.plume_model.calc(
             x=x[np.newaxis, :],
             y=y[:, np.newaxis],
-            z=lidar.alt_offset,
+            z=coord.z0,
             time=self.time,
         )
         im = ax3.imshow(

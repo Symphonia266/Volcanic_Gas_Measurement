@@ -2,7 +2,7 @@ import sys
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from matplotlib import pyplot as plt
+from matplotlib import layout_engine, pyplot as plt
 from matplotlib import cm 
 from matplotlib import gridspec
 from matplotlib import colors
@@ -46,7 +46,7 @@ print(f"Atomospheric stability is : {stab_class}")
 spread_model = PasquillSpread()
 i = np.linspace(0, 7)
 x = np.power(10, i)
-fig, axes = plt.subplots(1, 2)
+fig, axes = plt.subplots(1, 2, layout="constrained")
 for ax in axes.ravel():
     ax.grid(which="major", ls="-", c="darkgrey")
     ax.grid(which="minor", ls="--", c="lightgrey")
@@ -90,9 +90,9 @@ model = PlumeModel(field, source)
 x = np.linspace(0, 100, 100)[np.newaxis, :]
 y = np.linspace(-50, 50, 100)[:, np.newaxis]
 z = np.array([0])
-C = model.concentration(x, y, z)
+C = model.calc(x, y, z)
 
-fig2, ax2 = plt.subplots()
+fig2, ax2 = plt.subplots(1,1,layout="constrained")
 im = ax2.imshow(
     C,          # 軸を転置して y を縦軸に
     # norm=LogNorm(),
@@ -109,43 +109,6 @@ plt.show(block=False)
 
 # =====================================================================
 
-field = Field(2, weather="clear", wind_direction_deg=90)
-q, x_src, y_src = gen_fauntainsource(radius=5, cnt=[50, -30], N_pt=10)
-He = np.full_like(q, 2)
-source = Source(q, x_src, y_src, He)
-model = PlumeModel(field, source)
-
-x = np.linspace(0, 100, 250)[np.newaxis, :]
-y = np.linspace(-50, 50, 250)[:, np.newaxis]
-z = np.array([0])
-C = model.concentration(x, y, z)
-
-fig = plt.figure()
-ax = fig.add_subplot(111, projection="3d", aspect="equal")
-ax.scatter(x_src, y_src, He, c=q)
-ax.set_xlim(x.min(), x.max())
-ax.set_ylim(y.min(), y.max())
-ax.set_zlim(0, 10)
-plt.show(block=False)
-
-fig, ax = plt.subplots(1,1)
-im = ax.imshow(
-    C,          # 軸を転置して y を縦軸に
-    # norm=LogNorm(),
-    origin='lower',      # 左下を (x_min, y_min) に
-    extent=[x.min(), x.max(), y.min(), y.max()],
-    aspect='equal',
-    cmap='jet'
-)
-fig.colorbar(im, label='Concentration [units]')
-ax.set_xlabel("downwind distance [m]")
-ax.set_ylabel("horizontal spread [m]")
-ax.set_title("Ground-level Concentration Heatmap (z=0)")
-plt.show(block=False)
-
-# ====================================================================
-
-
 x = np.linspace(0, 100, 50)
 y = np.linspace(-50, 50, 50)
 z = np.linspace(0, 30, 50)
@@ -157,7 +120,7 @@ He = np.full_like(q, 10)
 source = Source(q, x_src, y_src, He)
 model = PlumeModel(field, source)
 
-C1 = model.concentration(X, Y, Z)
+C1 = model.calc(X, Y, Z)
 X1 = X[C1>1e-6]
 Y1 = Y[C1>1e-6]
 Z1 = Z[C1>1e-6]
@@ -167,7 +130,7 @@ colors1 = cm.jet(C1_norm)
 colors1[...,-1] = C1_norm
 
 model.field.update(windspeed=10, stab_class="D")
-C2 = model.concentration(X, Y, Z)
+C2 = model.calc(X, Y, Z)
 X2 = X[C2>1e-6]
 Y2 = Y[C2>1e-6]
 Z2 = Z[C2>1e-6]
@@ -176,7 +139,7 @@ C2_norm = (C2-C2.min())/(C2.max()-C2.min())
 colors2 = cm.jet(C2_norm)
 colors2[...,-1] = C2_norm
 
-fig = plt.figure()
+fig = plt.figure(layout="constrained")
 gs = gridspec.GridSpec(
     2, 2,
     width_ratios=[9, 1],   # 左にプロット、右にカラーバー

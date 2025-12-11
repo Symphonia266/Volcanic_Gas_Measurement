@@ -54,7 +54,9 @@ class PlumeEnvironment:
 
         self.gas_inventory = {k: obj for k, obj in gas.items()}
         self.time = time
-        self.aer_absorp_feat = 1
+        self.aer_absorp_feat = 1.0
+        print(f"elapsed time(and multiplier time)   : {utils.elapsed_time_str(time)}")
+        print(f"multi. coeff. in aerzol absorptance : {self.aer_absorp_feat:.2f}\n")
 
     def number_density_at(self, x, y, z):
         C = self.plume_model.calc(x, y, z, time=self.time)
@@ -131,7 +133,6 @@ class PlumeEnvironment:
             p = ax1.scatter(
                 coord.distance,
                 utils.number_density_to_ppm(n, coord.z),
-                clip_on=False,
                 label=name,
             )
             p1.append(p)
@@ -139,10 +140,11 @@ class PlumeEnvironment:
         x = np.linspace(coord.x.min(),   coord.x.max(), 200)
         z = np.linspace(coord.z.min(),   coord.z.max(), 200)
         C = self.plume_model.calc(x, 0, z, time=self.time)
-        p2 = ax2.plot(r, C / C.max(), c="darkgrey", clip_on=False, label="plume-coeff.")
+        p2 = ax2.plot(r, C / C.max(), c="darkgrey", label="plume-coeff.")
         ax1.set_xlabel("distance [m]")
         ax1.set_ylabel("concentration [ppm]")
         ax2.set_ylabel("coefficient(normalized)")
+        ax1.set_xlim(coord.x.min(), coord.x.max())
         ax1.set_ylim(0, None)
         ax2.set_ylim(0, 1)
         ax1.legend(handles=[*p1, *p2])

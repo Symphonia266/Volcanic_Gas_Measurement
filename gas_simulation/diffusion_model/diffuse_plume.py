@@ -137,6 +137,12 @@ class Field:
         else:
             raise ValueError("Need weather or stab_class")
 
+        print("The field is ...")
+        print(f"    wind speed          : {self.windspeed:.2f} [m/s]")
+        print(f"    wind direction      : {wind_direction_deg:.2f} [degree]")
+        print(f"    wether              : {self.weather}")
+        print(f"    atom stable class.  : {self.stab_class}\n")
+
     def update(
         self,
         *,
@@ -145,16 +151,23 @@ class Field:
         stab_class=None,
         wind_direction_deg=None,
     ):
+        print("The field is updated ...")
         if windspeed is not None:
             self.windspeed = windspeed
+            print(f"    wind speed          : {self.windspeed:.2f} [m/s]")
         if wind_direction_deg is not None:
+            print(f"    wind direction      : {wind_direction_deg:.2f} [degree]")
             self.wind_direction = np.deg2rad(wind_direction_deg)
         if stab_class is not None:
             self.stab_class = stab_class
             self.weather = inverse_stab_class_to_wether(self.windspeed, stab_class)
+            print(f"    wether              : {self.weather}")
+            print(f"    atom stable class.  : {self.stab_class}")
         elif weather is not None:
             self.weather = weather
             self.stab_class = classify_atomosphere_stability(self.windspeed, weather)
+            print(f"    wether              : {self.weather}")
+            print(f"    atom stable class.  : {self.stab_class}")
 
 
 class Source:
@@ -171,7 +184,7 @@ class Source:
         self._profile = np.zeros((0, 4), dtype=float)
         if Q is not None and x is not None and y is not None and He is not None:
             self.add(Q, x, y, He)
-
+        
     def add(self, Q, x, y, He):
         # 配列化
         Q = np.atleast_1d(Q)
@@ -184,9 +197,11 @@ class Source:
 
         new = np.column_stack([Q, x, y, He])
         self._profile = np.vstack([self._profile, new])
+        print(f"source entry are {self._profile.shape[0]} points\n")
 
     def clear(self):
         self._profile = np.zeros((0, 4), dtype=float)
+        print(f"source entry is none")
 
     def __len__(self):
         return self._profile.shape[0]

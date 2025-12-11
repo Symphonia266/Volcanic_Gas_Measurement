@@ -10,9 +10,9 @@ from pathlib import Path
 project_root = Path(__file__).resolve().parent.parent
 sys.path.append(str(project_root))
 
+from gas_simulation import utils
 from gas_simulation.consts import main_gases_props
 from gas_simulation.atom import alphas_mol, alphas_aer
-from gas_simulation import utils
 from gas_simulation.atom import betas_N2, betas_O2
 
 from gas_simulation.model import (
@@ -22,7 +22,8 @@ from gas_simulation.model import (
     Gas,
     PlumeEnvironment,
 )
-from gas_simulation.lidar_model.lidar import Coord, Lidar, Dial
+from gas_simulation.lidar_model.lidar import Coord, Lidar, Dial, calc_dial_correction_factor
+from gas_simulation import result_viewer as viewer
 
 xs_SO2 = utils.load_cross_section(
     "SO2_VandaeleHermansFally(2009)_358K_227.275-416.658nm.xlsx",
@@ -40,37 +41,53 @@ xs_O3 = utils.load_cross_section(
     effective=True,
 )
 
-field = Field(10, stab_class="D", wind_direction_deg=45)
-lidar = Lidar()
-
-end = 1000.0
-elevation_deg=0.0
-alt_offset=1000
-dR = 5
+t_sec = 60*30 #[minutes]
+field = Field(2, weather="clear", wind_direction_deg=75)
+lidar = Lidar(M=100*t_sec)
 lidar_coord = Coord(
-    distance=np.arange(dR, end, dR),
-    theta_deg=elevation_deg,
+    distance=np.arange(5, 1000, 5),
+    theta_deg=0.0,
     x0=0,
-    z0=alt_offset,
+    z0=1000,
 )
 # q, x_src, y_src = gen_fauntainsource(radius=5, cnt=[50, -10], N_pt=30)
-q, x_src, y_src = gen_fauntainsource(radius=5, cnt=[300, -50], N_pt=20)
-He = np.full_like(q, lidar_coord.z0 + 2)
-source = Source(q, x_src, y_src, He)
-q, x_src, y_src = gen_fauntainsource(radius=5, cnt=[400, -100], N_pt=20)
-He = np.full_like(q, lidar_coord.z0 + 2)
-source.add(q, x_src, y_src, He)
-q, x_src, y_src = gen_fauntainsource(radius=5, cnt=[600, -200], N_pt=20)
-He = np.full_like(q, lidar_coord.z0 + 2)
-source.add(q, x_src, y_src, He)
+src = np.array([
+    [1, 300, -50,  lidar_coord.z0 + 2], 
+    [1, 500, -100, lidar_coord.z0 + 2], 
+    [1, 700, -50,  lidar_coord.z0 + 2], 
+    [1, 725, -100, lidar_coord.z0 + 2], 
+    [1, 750, -50,  lidar_coord.z0 + 2], 
+]).T
+source = Source(src[0], src[1], src[2], src[3])
+# q, x_src, y_src = gen_fauntainsource(radius=5, cnt=[300, -50], N_pt=10)
+# He = np.full_like(q, lidar_coord.z0 + 2)
+# source = Source(q, x_src, y_src, He)
+# q, x_src, y_src = gen_fauntainsource(radius=5, cnt=[500, -100], N_pt=10)
+# He = np.full_like(q, lidar_coord.z0 + 2)
+# source.add(q, x_src, y_src, He)
+# q, x_src, y_src = gen_fauntainsource(radius=5, cnt=[700, -50], N_pt=10)
+# He = np.full_like(q, lidar_coord.z0 + 2)
+# source.add(q, x_src, y_src, He)
+# q, x_src, y_src = gen_fauntainsource(radius=5, cnt=[725, -100], N_pt=10)
+# He = np.full_like(q, lidar_coord.z0 + 2)
+# source.add(q, x_src, y_src, He)
+# q, x_src, y_src = gen_fauntainsource(radius=5, cnt=[750, -50], N_pt=10)
+# He = np.full_like(q, lidar_coord.z0 + 2)
+# source.add(q, x_src, y_src, He)
+
 
 env = PlumeEnvironment(
     field=field,
     source=source,
-    time=10 * 60,
+    time= t_sec,
     gas={
-        "SO2": Gas(Q=60e5, offset=0, cross_section=xs_SO2),
-        "H2S": Gas(Q=30e5, offset=0, cross_section=xs_H2S),
+        # 煙源直下で30ppmになるよう調整したQ
+        # "SO2": Gas(Q=80e5, offset=0, cross_section=xs_SO2),
+        # "H2S": Gas(Q=40e5, offset=0, cross_section=xs_H2S),
+        # 今回の煙源位置、風プロファイル設定で30ppm程度になるよう調整したQ
+        "SO2": Gas(Q= 15e7, offset=0,     cross_section=xs_SO2),
+        "H2S": Gas(Q=7.5e7, offset=0,     cross_section=xs_H2S),
+        "O3" : Gas(Q=0,    offset=0.005, cross_section=xs_O3),
     },
 )
 env.show_gases(lidar_coord)
@@ -85,14 +102,10 @@ wl = {
 }
 
 # === Below this a provisional simulation scenario. ===
-# (
-#     to be expanded to support arbitrary wavelength inputs in the future;
-#     script to be modified for the simulation API
-# )
 wl_laser = wl["laser"]
 wl_N2 = wl["N2_as"]
 wl_O2 = wl["O2_as"]
-idx_300nm = np.searchsorted(wl_laser, 300)
+idx_320nm = np.searchsorted(wl_laser, 320)
 
 beta_N2 = betas_N2(lidar_coord.z)
 beta_O2 = betas_O2(lidar_coord.z)
@@ -131,9 +144,9 @@ tau_off = np.where(mask, tau_O2, tau_N2)
 dial = Dial()
 dial_coord = Coord(
     distance=(lidar_coord.distance[1:]+lidar_coord.distance[:-1])/2,
-    theta_deg=elevation_deg,
-    x0=0,
-    z0=alt_offset,
+    theta_deg=lidar_coord.theta_deg,
+    x0=lidar_coord.x0,
+    z0=lidar_coord.z0,
 )
 dial_dR = np.diff(lidar_coord.distance)
 res = dial.calc(
@@ -152,148 +165,51 @@ stat_err = dial.stat_error(
     dR=dial_dR[:, np.newaxis],
     d_xs=d_xs_SO2[np.newaxis, :],
 )
-for n in utils.number_density_to_ppm(stat_err, dial_coord.z[:, np.newaxis])[:, idx_300nm]:
-    print(n)
-
-# === Preparations for DIAL Calculations  ===
-alpha_mol_laser = alphas_mol(
-    wl_laser[np.newaxis, :], 
-    dial_coord.z[:, np.newaxis]
+dial_correction_factor = calc_dial_correction_factor(
+    env=env, 
+    alt=dial_coord.z[:, np.newaxis],
+    wl_on = wl_on[np.newaxis, :], 
+    wl_off = wl_off[np.newaxis, :],
+    d_xs= d_xs_SO2[np.newaxis, :]
 )
-alpha_mol_on = alpha_mol_laser + alphas_mol(
-    wl_on[np.newaxis, :], 
-    dial_coord.z[:, np.newaxis]
-)
-alpha_mol_off = alpha_mol_laser + alphas_mol(
-    wl_off[np.newaxis, :], 
-    dial_coord.z[:, np.newaxis]
-)
-d_alpha_mol = alpha_mol_on - alpha_mol_off
-
-alpha_aer_laser = alphas_aer(
-    wl_laser[np.newaxis, :], 
-    dial_coord.z[:, np.newaxis],
-    env.aer_absorp_feat
-)
-alpha_aer_on = alpha_aer_laser + alphas_aer(
-    wl_on[np.newaxis, :], 
-    dial_coord.z[:, np.newaxis], 
-    env.aer_absorp_feat
-)
-alpha_aer_off = alpha_aer_laser + alphas_aer(
-    wl_off[np.newaxis, :], 
-    dial_coord.z[:, np.newaxis], 
-    env.aer_absorp_feat
-)
-d_alpha_aer = alpha_aer_on - alpha_aer_off
-
-# n_gas = env.number_density_at(dial.x_grid, 0, dial.z_grid)
-# alpha_H2S_laser =n_gas["H2S"] *env.gas_profile["H2S"].cross_section(wl_laser)[np.newaxis, :]
-# alpha_H2S_on = (
-#     alpha_H2S_laser +
-#     n_gas["H2S"] *env.gas_profile["H2S"].cross_section(wl_on)[np.newaxis, :]
-# )
-# alpha_H2S_off = (
-#     alpha_H2S_laser +
-#     n_gas["H2S"] *env.gas_profile["H2S"].cross_section(wl_off)[np.newaxis, :]
-# )
-# d_alpha_H2S = alpha_H2S_on - alpha_H2S_off
-
-dial_correction_factor = (d_alpha_mol + d_alpha_aer) / d_xs_SO2[np.newaxis, :]
 
 # === test plot ===
-fig, axes = plt.subplots(2, 2, layout="constrained")
-axes[0, 0].plot(lidar_coord.distance, tau_on[:, idx_300nm], c="red", ls="-", label="on")
-axes[0, 0].plot(
-    lidar_coord.distance, tau_off[:, idx_300nm], c="blue", ls="-", label="off"
+fig1, axes1 = viewer.lidar_equation_result_viewer(
+    coord=lidar_coord,
+    tau_on_dist=tau_on[:, idx_320nm],
+    tau_off_dist=tau_off[:, idx_320nm],
+    p_on_dist=p_on[:, idx_320nm],
+    p_off_dist=p_off[:, idx_320nm],
+    wl=wl_laser,
+    tau_on_wl=tau_on[-1, :],
+    tau_off_wl=tau_off[-1, :],
+    p_on_wl=p_on[-1, :],
+    p_off_wl=p_off[-1, :],
 )
-# axes[0].plot(env.lidar.distance[1:], tau_N2[:, idx_300nm],  c ="orange",ls="--", label="N2")
-# axes[0].plot(env.lidar.distance[1:], tau_O2[:, idx_300nm],  c ="green", ls="--", label="O2")
-
-axes[0, 1].plot(
-    lidar_coord.distance, p_on[:, idx_300nm], marker="o", c="red", ls="-", label="on"
-)
-axes[0, 1].plot(
-    lidar_coord.distance,
-    p_off[:, idx_300nm],
-    marker="o",
-    c="blue",
-    ls="-",
-    label="off",
-)
-
-axes[1, 0].plot(wl_laser, tau_on[-1, :], c="red", ls="-", label="on")
-axes[1, 0].plot(wl_laser, tau_off[-1, :], c="blue", ls="-", label="off")
-# axes[0].plot(wl_laser, tau_N2[9, :],  c ="orange",ls="--", label="N2")
-# axes[0].plot(wl_laser, tau_O2[9, :],  c ="green", ls="--", label="O2")
-
-axes[1, 1].plot(wl_laser, p_on[-1, :], c="red", ls="-", label="on")
-axes[1, 1].plot(wl_laser, p_off[-1, :], c="blue", ls="-", label="off")
-# axes[1].plot(wl_laser, p_N2[9, :],  c ="orange",ls="--", label="N2")
-# axes[1].plot(wl_laser, p_O2[9, :],  c ="green", ls="--", label="O2")
-
-for ax in axes[0, :]:
-    ax.set_xlabel("lidar distance [m]")
-for ax in axes[1, :]:
-    ax.set_xlabel("laser wavelength [nm]")
-for ax in axes[:, 0]:
-    ax.set_ylabel(r"transmittance $\tau$")
-    ax.set_ylim(0, 1.0)
-for ax in axes[:, 1]:
-    ax.set_ylabel(r"receive power $P_{phot}$")
-    ax.set_yscale("log")
-
-for ax in axes.flatten():
-    ax.grid(which="major", ls="-", c="darkgrey")
-    ax.grid(which="minor", ls="--", c="lightgrey")
-    ax.legend()
-
 plt.show(block=False)
 
-fig, ax = plt.subplots(1, 1, layout="constrained")
-ax.grid(which="major", ls="-", c="darkgrey")
-ax.grid(which="minor", ls="--", c="lightgrey")
+n_gas = env.number_density_at(lidar_coord.x, 0, lidar_coord.z)
+_dial_coord = Coord(
+    distance=(lidar_coord.distance[1:]+lidar_coord.distance[:-1])/2,
+    theta_deg=lidar_coord.theta_deg,
+    x0 = lidar_coord.x0, 
+    z0 = lidar_coord.z0
+)
+n_true = {k:(v[1:]+v[:-1])/2 for k, v in n_gas.items()}
 
-r = np.linspace(lidar_coord.distance.min(), lidar_coord.distance.max(), 1000)
-x = np.linspace(lidar_coord.x.min(), lidar_coord.x.max(), 1000)
-z = np.linspace(lidar_coord.z.min(), lidar_coord.z.max(), 1000)
-ax.plot(
-    r,
-    utils.number_density_to_ppm(env.number_density_at(x, 0, z)["SO2"], z),
-    c="black",
-    label="True",
+fig2, axes2 = viewer.dial_equation_result_viewer(
+    env=env, 
+    coord=dial_coord,
+    n_true_dist=n_true["SO2"],
+    res1_dist=res[:, idx_320nm], 
+    res2_dist=(res-dial_correction_factor)[:, idx_320nm], 
+    stat_err_dist=stat_err[:, idx_320nm], 
+    wl=wl_laser, 
+    n_true_wl=n_true["SO2"][-1],
+    res1_wl=res[-1, :],
+    res2_wl=(res-dial_correction_factor)[-1, :],
+    stat_err_wl=stat_err[-1, :]
 )
-ax.scatter(
-    dial_coord.distance,
-    utils.number_density_to_ppm(
-        env.number_density_at(dial_coord.x, 0, dial_coord.z)["SO2"], dial_coord.z
-    ),
-    c="black",
-)
-ax.errorbar(
-    x=dial_coord.distance,
-    y=utils.number_density_to_ppm(res, dial_coord.z[:, np.newaxis])[:, idx_300nm],
-    yerr=utils.number_density_to_ppm(
-        stat_err, dial_coord.z[:, np.newaxis]
-    )[:, idx_300nm],
-    capsize=8, fmt='o', markersize=8, ecolor='red', color='red',
-    label="DIAL Result",
-)
-ax.errorbar(
-    x=dial_coord.distance,
-    y=utils.number_density_to_ppm(
-        res - dial_correction_factor, dial_coord.z[:, np.newaxis]
-    )[:, idx_300nm],
-    yerr=utils.number_density_to_ppm(
-        stat_err, dial_coord.z[:, np.newaxis]
-    )[:, idx_300nm],
-    capsize=8, fmt='o', markersize=8, ecolor='green', color='green',
-    label="DIAL Result (mol. and aer. Correction)",
-)
-ax.set_xlabel("lidar distance [m]")
-ax.set_ylabel(r"concentration $n_{SO2}$[ppm]")
-ax.legend()
-plt.show(block=False)
 
 # 信号処理変更
 window_N = 5
@@ -305,19 +221,20 @@ p_off_sw_R1 = p_off_sw[:-window_N]
 p_off_sw_R2 = p_off_sw[window_N:]
 
 distance_sw = np_SWV(lidar_coord.distance, window_shape=window_N).mean(axis=-1)
+dial_dR=distance_sw[window_N:] - distance_sw[:-window_N]
 dial_coord = Coord(
     distance=(distance_sw[window_N:] + distance_sw[:-window_N]) / 2, 
-    theta_deg=elevation_deg,
-    x0 = 0, 
-    z0 = alt_offset
+    theta_deg=lidar_coord.theta_deg,
+    x0 = lidar_coord.x0, 
+    z0 = lidar_coord.z0
 )
-dial_dR=distance_sw[window_N:] - distance_sw[:-window_N]
 
 n_gas = env.number_density_at(lidar_coord.x, 0, lidar_coord.z)
-n_true_sw = np_SWV(n_gas["SO2"], window_shape=window_N).mean(axis=-1)
+n_true = {}
+for k, v in n_gas.items():
+    n_true[k] = np_SWV(v, window_shape=window_N).mean(axis=-1)
+    n_true[k] = (n_true[k][window_N:]+n_true[k][:-window_N])/2
 
-print(f"{dial_coord.distance.shape} : {dial_coord.distance}")
-print(f"{dial_dR.shape} : {dial_dR}")
 res = dial.calc(
     p_on_R1=p_on_sw_R1,
     p_on_R2=p_on_sw_R2,
@@ -334,134 +251,27 @@ stat_err = dial.stat_error(
     dR=dial_dR[:, np.newaxis],
     d_xs=d_xs_SO2[np.newaxis, :],
 )
-print(res.shape)
-print(dial_dR.shape)
-# === Preparations for DIAL Calculations  ===
-alpha_mol_laser = alphas_mol(wl_laser[np.newaxis, :], dial_coord.z[:, np.newaxis])
-alpha_mol_on = alpha_mol_laser + alphas_mol(
-    wl_on[np.newaxis, :], dial_coord.z[:, np.newaxis]
-)
-alpha_mol_off = alpha_mol_laser + alphas_mol(
-    wl_off[np.newaxis, :], dial_coord.z[:, np.newaxis]
-)
-d_alpha_mol = alpha_mol_on - alpha_mol_off
-
-alpha_aer_laser = alphas_aer(
-    wl_laser[np.newaxis, :], dial_coord.z[:, np.newaxis], env.aer_absorp_feat
-)
-alpha_aer_on = alpha_aer_laser + alphas_aer(
-    wl_on[np.newaxis, :], dial_coord.z[:, np.newaxis], env.aer_absorp_feat
-)
-alpha_aer_off = alpha_aer_laser + alphas_aer(
-    wl_off[np.newaxis, :], dial_coord.z[:, np.newaxis], env.aer_absorp_feat
-)
-d_alpha_aer = alpha_aer_on - alpha_aer_off
-
-# n_gas = env.number_density_at(dial.x_grid, 0, dial.z_grid)
-# alpha_H2S_laser =n_gas["H2S"] *env.gas_profile["H2S"].cross_section(wl_laser)[np.newaxis, :]
-# alpha_H2S_on = (
-#     alpha_H2S_laser +
-#     n_gas["H2S"] *env.gas_profile["H2S"].cross_section(wl_on)[np.newaxis, :]
-# )
-# alpha_H2S_off = (
-#     alpha_H2S_laser +
-#     n_gas["H2S"] *env.gas_profile["H2S"].cross_section(wl_off)[np.newaxis, :]
-# )
-# d_alpha_H2S = alpha_H2S_on - alpha_H2S_off
-
-dial_correction_factor = (d_alpha_mol + d_alpha_aer) / d_xs_SO2[np.newaxis, :]
-
-fig, axes = plt.subplots(1, 2, layout="constrained")
-axes[0].plot(
-    lidar_coord.distance, 
-    p_on[:, idx_300nm], 
-    marker="o", c="red", ls="--", label="on"
-)
-axes[0].plot(
-    lidar_coord.distance,
-    p_off[:, idx_300nm],
-    marker="o",
-    c="blue",
-    ls="--",
-    label="off",
-)
-axes[0].plot(
-    distance_sw,
-    p_on_sw[:, idx_300nm],
-    marker="*",
-    c="red",
-    ls="-",
-    label="on (5pt sum)",
-)
-axes[0].plot(
-    distance_sw,
-    p_off_sw[:, idx_300nm],
-    marker="*",
-    c="blue",
-    ls="-",
-    label="off (5pt sum)",
-)
-# ==========================================
-
-axes[1].plot(
-    r,
-    utils.number_density_to_ppm(env.number_density_at(x, 0, z)["SO2"], z),
-    c="black",
-    label="True",
-)
-# a = Coord(distance_sw, lidar.coord.theta_deg, lidar.coord.x0, lidar.coord.z0)
-# axes[1].scatter(
-#     lidar.coord.distance,
-#     utils.number_density_to_ppm(n_gas["SO2"], lidar.coord.z),
-#     c="black",
-#     marker="o",
-#     s=10,
-# )
-
-# axes[1].scatter(
-#     a.distance,
-#     utils.number_density_to_ppm(n_true_sw, a.z),
-#     c="black",
-#     marker="o",
-# )
-
-n_true_sw = (n_true_sw[window_N:] + n_true_sw[:-window_N]) / 2
-axes[1].scatter(
-    dial_coord.distance,
-    utils.number_density_to_ppm(n_true_sw, dial_coord.z),
-    c="black",
-    marker="*",
-)
-axes[1].errorbar(
-    x=dial_coord.distance,
-    y=utils.number_density_to_ppm(res, dial_coord.z[:, np.newaxis])[:, idx_300nm],
-    yerr=utils.number_density_to_ppm(
-        stat_err, dial_coord.z[:, np.newaxis]
-    )[:, idx_300nm],
-    capsize=8, fmt='o', markersize=8, ecolor='red', color='red',
-    label="DIAL Result",
-)
-axes[1].errorbar(
-    x=dial_coord.distance,
-    y=utils.number_density_to_ppm(
-        res - dial_correction_factor, dial_coord.z[:, np.newaxis]
-    )[:, idx_300nm],
-    yerr=utils.number_density_to_ppm(
-        stat_err, dial_coord.z[:, np.newaxis]
-    )[:, idx_300nm],
-    capsize=8, fmt='o', markersize=8, ecolor='green', color='green',
-    label="DIAL Result (mol. and aer. Correction)",
+dial_correction_factor = calc_dial_correction_factor(
+    env=env, 
+    alt=dial_coord.z[:, np.newaxis],
+    wl_on = wl_on[np.newaxis, :], 
+    wl_off = wl_off[np.newaxis, :],
+    d_xs= d_xs_SO2[np.newaxis, :]
 )
 
-axes[0].set_ylabel(r"receive power $P_{phot}$")
-axes[1].set_ylabel(r"concentration $n_{SO2}$[ppm]")
-axes[0].set_yscale("log")
-
-for ax in axes:
-    ax.grid(which="major", ls="-", c="darkgrey")
-    ax.grid(which="minor", ls="--", c="lightgrey")
-    ax.set_xlabel("lidar distance [m]")
-    ax.legend()
+fig3, axes3 = viewer.dial_equation_result_viewer(
+    env=env, 
+    coord=dial_coord,
+    n_true_dist=n_true["SO2"],
+    res1_dist=res[:, idx_320nm], 
+    res2_dist=(res-dial_correction_factor)[:, idx_320nm], 
+    stat_err_dist=stat_err[:, idx_320nm], 
+    wl=wl_laser, 
+    n_true_wl=n_true["SO2"][-1],
+    res1_wl=res[-1, :],
+    res2_wl=(res-dial_correction_factor)[-1, :],
+    stat_err_wl=stat_err[-1, :]
+)
 
 plt.show(block=False)
 input("PRESS ANY KEY...")

@@ -5,7 +5,9 @@ from scipy import constants as consts
 from matplotlib import pyplot as plt
 
 from .optics import overlap
-
+from gas_simulation import utils
+from gas_simulation.atom import alphas_mol, alphas_aer
+from gas_simulation.atom import betas_N2, betas_O2
 
 @dataclass
 class Coord:
@@ -28,14 +30,6 @@ class Coord:
         z = self.z0 + r * np.sin(theta)
         return x, z
 
-        self.coord = Coord(
-            distance=np.arange(dR, end, dR),
-            theta_deg=elevation_deg,
-            x0=0,
-            z0=alt_offset,
-        )
-
-
 class Lidar:
     def __init__(
         self,
@@ -43,7 +37,7 @@ class Lidar:
         dR: float = 5.0,
         E0: float = 0.1,
         A: float = 0.3,
-        M: float = 100 * 60 * 60.0,  # 100 Hz / 1 hour
+        M: float = 100 * 60 * 30.0,  # 100 Hz / 1 hour
         eta: float = 0.3,
         q: float = 0.3,
     ):
@@ -90,8 +84,24 @@ class Dial:
         return res
 
     def stat_error(self, p_on_R1, p_on_R2, p_off_R1, p_off_R2, dR, d_xs):
-        f = lambda x: (self.D + (x + self.Bj) * self.F) / (x**2)
+        f = lambda x: (self.D + self.F*(x + self.Bj)) / (x*x)
         res = f(p_on_R1) + f(p_on_R2) + f(p_off_R1) + f(p_off_R2)
-        res = np.sqrt(res)
-        res /= 2 * dR * d_xs
+        res = np.sqrt(res)/(2 * dR * d_xs)
         return res
+    
+def calc_dial_correction_factor(env, alt, wl_on, wl_off, d_xs):
+    alpha_mol_on = alphas_mol(wl_on, alt)
+    alpha_mol_off = alphas_mol(wl_off, alt)
+    d_alpha_mol = alpha_mol_on - alpha_mol_off
+
+    alpha_aer_on = alphas_aer(wl_on, alt, env.aer_absorp_feat)
+    alpha_aer_off = alphas_aer(wl_off, alt, env.aer_absorp_feat)
+    d_alpha_aer = alpha_aer_on - alpha_aer_off
+
+    # d_alpha_gas = {}
+    # for key, n in n_gas_est.items():
+    #     alpha_gas_on = n*env.gas_profile[key].cross_section(wl_on)
+    #     alpha_gas_off = n*env.gas_profile[key].cross_section(wl_off)
+    #     d_alpha_gas[key] = alpha_gas_on - alpha_gas_off
+
+    return (d_alpha_mol + d_alpha_aer) / d_xs

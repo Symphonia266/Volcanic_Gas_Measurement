@@ -7,11 +7,14 @@ from . import package_path, data_dir, data_file
 from .consts import main_gases_props
 from .atom import N
 
+
 def ppm_to_number_density(ppm, alt):
     return ppm * 1e-6 * N(alt)
 
+
 def number_density_to_ppm(n, alt):
     return n * 1e6 / N(alt)
+
 
 def nu(wl):
     """the frequency[Hz] by a wavelength [nm]
@@ -28,14 +31,14 @@ def nu(wl):
 
 def trans_wn_wl(w):
     """wavenumber[cm-1] <-> wavelength[nm]
-    
+
     Args:
         wl (_float_): wavenumber[cm-1] / wavelength[nm]
 
     Returns:
         float: [inverse] wavelength[nm] / wavenumber[cm-1]
     """
-    
+
     return 1e7 / w
 
 
@@ -80,9 +83,10 @@ def wl_shift(wl, sft, dir: bool, *, inv: bool = False):
     sign = -1 if inv else 1
     return trans_wn_wl(trans_wn_wl(wl) + sign * (sft if dir else -sft))
 
+
 def gen_conbi(wl, scat1, scat2, dir1, dir2):
-    wl_s1 = wl_shift(wl, gases.at[scat1, "sft"], dir1)
-    wl_s2 = wl_shift(wl, gases.at[scat2, "sft"], dir2)
+    wl_s1 = wl_shift(wl, main_gases_props.at[scat1, "sft"], dir1)
+    wl_s2 = wl_shift(wl, main_gases_props.at[scat2, "sft"], dir2)
     return wl_s1, wl_s2
 
 
@@ -121,6 +125,7 @@ def ratio_ASTK(
     # return t1 * t2
     # return np.exp(-const.hbar * shift / const.k / Temp)
     return 0.1
+
 
 def gaus(
     x,
@@ -216,9 +221,9 @@ def gaus(
         raise ValueError('gaus: "std" must be a positive finite value.')
 
     z = (x_arr - mean) / std_val
-    out = np.exp(-0.5 * z * z) 
+    out = np.exp(-0.5 * z * z)
     if normalize == "pdf":
-        out  /= (std_val * np.sqrt(2.0 * np.pi))
+        out /= std_val * np.sqrt(2.0 * np.pi)
     elif normalize == "peak":
         out = out
     else:
@@ -226,13 +231,14 @@ def gaus(
 
     return out
 
+
 def effective(
-    x, 
-    f, 
-    *, 
+    x,
+    f,
+    *,
     spec_sideband=2,
     N=100,
-    gaus_kwargs={"mean":0, "FWHM":1, "normalize":"peak"},
+    gaus_kwargs={"mean": 0, "FWHM": 1, "normalize": "peak"},
     **func_kwargs,
 ):
     """effective _summary_
@@ -254,31 +260,29 @@ def effective(
     -------
     _type_
         _description_
-    """    
+    """
     gaus_kwargs = dict(gaus_kwargs or {})
-    
-    x = np.asarray(x)
-    # 1D の「波長軸」を最後に持ってくる（ただし通常はそのまま）
-    *leading, Nwl = x.shape if x.ndim >= 1 else ([], 1)
 
+    x = np.atleast_1d(x)
     spec = np.linspace(-spec_sideband, spec_sideband, N)
-    
+
     weight = gaus(spec, **gaus_kwargs)
-    weight = weight/weight.sum()
-    
+    weight = weight / weight.sum()
+
     xx = x[..., :, np.newaxis] + spec[np.newaxis, :]
 
     yy = f(xx, **func_kwargs)
 
-    y = (weight[np.newaxis, :]*yy).sum(axis=-1)
+    y = (weight[np.newaxis, :] * yy).sum(axis=-1)
     return y
 
+
 def effective_from_interp(
-    interp_func, 
-    *, 
-    spec_sideband=2, 
-    N=100, 
-    gaus_kwargs={"mean":0, "FWHM":1, "normalize":"peak"},
+    interp_func,
+    *,
+    spec_sideband=2,
+    N=100,
+    gaus_kwargs={"mean": 0, "FWHM": 1, "normalize": "peak"},
 ):
     """
     interp1d 等の波長->断面積関数を受け取り、
@@ -287,15 +291,18 @@ def effective_from_interp(
     返される関数は scalar または 1D array の wl を受け取り
     calc_of_effective を内部で呼んで値を返します。
     """
+
     def new_func(x):
         return effective(
-            x, 
-            interp_func, 
-            spec_sideband=spec_sideband, 
-            N=N, 
-            gaus_kwargs=gaus_kwargs or {}, 
+            x,
+            interp_func,
+            spec_sideband=spec_sideband,
+            N=N,
+            gaus_kwargs=gaus_kwargs or {},
         )
+
     return new_func
+
 
 def _read_excel_safe(fname, **kwargs):
     p = data_dir / fname
@@ -303,15 +310,17 @@ def _read_excel_safe(fname, **kwargs):
         raise FileNotFoundError(f"file are not found: {p}")
     return pd.read_excel(p, **kwargs)
 
+
 def load_cross_section(
-        fname, 
-        *, 
-        skiprows=5, 
-        wl_col=0, 
-        xs_col=1, 
-        interp_kwargs=None, 
-        effective: bool = False,
-        **read_kwargs):
+    fname,
+    *,
+    skiprows=5,
+    wl_col=0,
+    xs_col=1,
+    interp_kwargs=None,
+    effective: bool = False,
+    **read_kwargs,
+):
     """
     Excel ファイルを読み、WL/XS 列を取り出して interp1d を返す。
     - skiprows: ヘッダ等のスキップ行数（既定値は 5）
@@ -319,31 +328,34 @@ def load_cross_section(
     """
     interp_kwargs = dict(interp_kwargs or {})
     df = _read_excel_safe(
-        fname, 
-        skiprows=skiprows, 
-        header=None, 
-        usecols=[wl_col, xs_col], 
-        names=["WL", "XS"], 
-        **read_kwargs
+        fname,
+        skiprows=skiprows,
+        header=None,
+        usecols=[wl_col, xs_col],
+        names=["WL", "XS"],
+        **read_kwargs,
     )
     df = df.dropna(subset=["WL", "XS"]).sort_values("WL")
     wl = df["WL"].to_numpy()
     xs = df["XS"].to_numpy()
 
     interp = interp1d(wl, xs, **interp_kwargs)
-    if  effective:
+    if effective:
         return effective_from_interp(interp)
 
     return interp
 
+
 def load_cross_section_dict(mapping, *, interp_kwargs=None, **read_kwargs):
     return {
-        k: load_cross_section(v, interp_kwargs=interp_kwargs, **read_kwargs) 
+        k: load_cross_section(v, interp_kwargs=interp_kwargs, **read_kwargs)
         for k, v in mapping.items()
     }
 
+
 class Subject:
     """変更通知機能を持つ Subject"""
+
     def __init__(self, *args, **kwargs):
         self._observers = []
         super().__init__(*args, **kwargs)

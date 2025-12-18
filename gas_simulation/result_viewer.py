@@ -3,7 +3,7 @@ from matplotlib import pyplot as plt
 from matplotlib.gridspec import GridSpec 
 
 from gas_simulation import utils
-from gas_simulation.model import PlumeEnvironment 
+from gas_simulation.model import Environment 
 from gas_simulation.lidar_model.lidar import Coord 
 
 def lidar_equation_result_viewer(
@@ -57,7 +57,7 @@ def lidar_equation_result_viewer(
     return fig, axes
 
 def dial_equation_result_viewer(
-    env:PlumeEnvironment, 
+    env:Environment, 
 
     coord:Coord,
     n_true_dist,

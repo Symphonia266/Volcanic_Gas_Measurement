@@ -32,6 +32,8 @@ __all__ = [
     "PlumeModel",
     "gen_fauntainsource",
     "Gas",
+    "Environment", 
+    "InstantEnvironment",
     "PlumeEnvironment",
 ]
 
@@ -50,7 +52,7 @@ class Environment(Protocol):
 
     def number_density_at(self, x, y, z)->dict[str, Numeric]:
         ...
-    def transmittance(self, coord:Coord, wl:Numeric, *, show=False)->Numeric:
+    def transmittance(self, coord:Coord, wl:Numeric, *, axes=False)->Numeric:
         ...
     def plot_LoS_gases(self, ax, coord:Coord)->None:
         ...

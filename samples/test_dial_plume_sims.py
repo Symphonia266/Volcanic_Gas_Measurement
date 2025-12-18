@@ -109,8 +109,8 @@ wl_s1 = wl["N2_as"]
 wl_s2 = wl["O2_as"]
 idx_320nm = np.searchsorted(wl_laser, 320)
 
-beta_N2 = betas_N2(lidar_coord.z)
-beta_O2 = betas_O2(lidar_coord.z)
+beta_N2 = betas_N2(lidar_coord.z)*0.1
+beta_O2 = betas_O2(lidar_coord.z)*0.1
 tau_laser = env.transmittance(lidar_coord, wl_laser)
 tau_s1 = tau_laser * env.transmittance(lidar_coord, wl_s1)
 tau_s2 = tau_laser * env.transmittance(lidar_coord, wl_s2)

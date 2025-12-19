@@ -1,15 +1,14 @@
 # coding: utf-8
 import os
 import sys
-from matplotlib.axes import Axes
-from matplotlib.image import AxesImage
-from matplotlib.pylab import imshow
 import numpy as np
 import pandas as pd
+from matplotlib.axes import Axes
+from matplotlib.image import AxesImage
 
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Protocol, TypeAlias
-from pathlib import Path
 from matplotlib import pyplot as plt
 
 # from scipy import constants as consts

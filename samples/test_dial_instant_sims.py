@@ -100,18 +100,18 @@ tau_off = np.where(mask[np.newaxis, :], tau_s2, tau_s1)
 n_gas = env.number_density_at(lidar_coord.x, 0, lidar_coord.z)
 p_on_R1, p_on_R2, p_off_R1, p_off_R2, dial_dR, dial_coord, n_true = dial.prepare_diff(p_on, p_off, lidar_coord, n_gas)
 res = dc.calc(
-    p_on_R1=p_on[:-1],
-    p_on_R2=p_on[1:],
-    p_off_R1=p_off[:-1],
-    p_off_R2=p_off[1:],
+    p_on_R1=p_on_R1,
+    p_on_R2=p_on_R2,
+    p_off_R1=p_off_R1,
+    p_off_R2=p_off_R2,
     dR=dial_dR[:, np.newaxis],
     d_xs=d_xs_SO2[np.newaxis, :],
 )
 stat_err = dc.stat_error(
-    p_on_R1=p_on[:-1],
-    p_on_R2=p_on[1:],
-    p_off_R1=p_off[:-1],
-    p_off_R2=p_off[1:],
+    p_on_R1=p_on_R1,
+    p_on_R2=p_on_R2,
+    p_off_R1=p_off_R1,
+    p_off_R2=p_off_R2,
     dR=dial_dR[:, np.newaxis],
     d_xs=d_xs_SO2[np.newaxis, :],
 )

@@ -6,6 +6,7 @@ from pathlib import Path
 from dataclasses import dataclass
 from itertools import combinations
 from matplotlib import pyplot as plt
+from matplotlib.gridspec import GridSpec
 from numpy.lib.stride_tricks import sliding_window_view as np_SWV
 
 # プロジェクトルートを sys.path に追加
@@ -172,22 +173,75 @@ new_coord = lidar_coord.with_(
 )
 n = env.number_density_at(new_coord.x, 0, new_coord.z)["SO2"]
 
-fig, axes = plt.subplots(1,2)
-axes[0].scatter(
+fig = plt.figure(layout="constrained")
+gs = GridSpec(
+    2, 2,
+    width_ratios=[1, 1],   # 左にプロット、右にカラーバー
+    height_ratios=[1, 1],  # 上下等分
+    # wspace=0.0,           # 左右の余白最小
+    # hspace=0.05             # 上下の余白ゼロ
+    figure=fig
+)
+ax_dist = fig.add_subplot(gs[:, 0])
+ax_err1_wl = fig.add_subplot(gs[0, 1])
+ax_err2_wl = fig.add_subplot(gs[1, 1], sharex=ax_err1_wl)
+axes = [ax_dist, ax_err1_wl, ax_err2_wl]
+ax_dist.scatter(
     coord.distance, 
     utils.number_density_to_ppm(n_true, coord.z), 
     c="black", marker="*"
 )
-axes[0].plot(
+ax_dist.plot(
     new_coord.distance, 
     utils.number_density_to_ppm(n, new_coord.z), 
     c="darkgrey"
 )
-axes[0].set(
+ax_dist.set(
     xlabel="(Line of Sight) distance [m]",
-    # xlim = (r.min(), r.max()),
     ylabel=r"SO$_2$ concentration [ppm]",
 )
+i=0
+c= [
+    "#1f77b4",  # Blue
+    "#ff7f0e",  # Orange
+    "#2ca02c",  # Green
+    "#d62728",  # Red
+    "#9467bd",  # Purple
+    "#8c564b",  # Brown
+]
 
+for (s1, s2), res_obj in results.items():
+    
+    idx = np.nanargmin(
+        np.abs(100*res_obj.stat_err[18,:]/res_obj.n_true[18])
+    )
+    print(f"min wl is {wl_laser[idx]:.2f} [nm]")
+    ax_dist.errorbar(
+        x=res_obj.coord.distance, 
+        y=utils.number_density_to_ppm(res_obj.res[:, idx], res_obj.coord.z), 
+        yerr=utils.number_density_to_ppm(res_obj.stat_err[:, idx], res_obj.coord.z),
+        capsize=8, fmt='o', markersize=6, ecolor=c[i], color=c[i], label=f"{s1}-{s2}"
+    )
+    ax_err1_wl.scatter(
+        wl_laser, 
+        np.abs(100*(res_obj.res[18,:]-res_obj.n_true[18])/res_obj.n_true[18]), 
+        c=c[i], label=f"{s1}-{s2}"
+    )
+    ax_err2_wl.scatter(
+        wl_laser, 
+        np.abs(100*res_obj.stat_err[18,:]/res_obj.n_true[18]), 
+        c=c[i], label=f"{s1}-{s2}")
+    ax_err1_wl.set_ylabel(r"contamination error $\varepsilon$ [%]")
+    ax_err2_wl.set_ylabel(r"statistical error $\Delta n / n$ [%]")
+    ax_err2_wl.set_xlabel("laser wavelength [nm]")
+    ax_err1_wl.set_yscale("log")
+    ax_err2_wl.set_yscale("log")
+    i+=1
+
+ax_dist.legend()
+for ax in axes:
+    ax.grid(which="major", ls="-", c="darkgrey")
+    ax.grid(which="minor", ls="--", c="lightgrey")
+    
 plt.show(block=False)
 input("PRESS ANY KEY...")

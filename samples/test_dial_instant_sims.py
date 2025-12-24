@@ -1,6 +1,7 @@
 # coding: utf-8
 import sys
 import numpy as np
+from dataclasses import replace
 from numpy.lib.stride_tricks import sliding_window_view as np_SWV
 from matplotlib import pyplot as plt
 from pathlib import Path
@@ -16,8 +17,8 @@ from gas_simulation.atom import betas_N2, betas_O2
 
 from gas_simulation.model import Gas, InstantEnvironment
 from gas_simulation.lidar_model.utils import Coord
-from gas_simulation.lidar_model import lidar 
-from gas_simulation.lidar_model import dial 
+from gas_simulation.lidar_model import lidar
+from gas_simulation.lidar_model import dial
 from gas_simulation import result_viewer as viewer
 
 xs_SO2 = utils.load_cross_section(
@@ -36,7 +37,7 @@ xs_O3 = utils.load_cross_section(
     effective=True,
 )
 
-t_sec = 60 * 30  # [sec]
+t_sec = 60 * 15  # [sec]
 lc = lidar.LidarCalc(M=100 * t_sec)
 dc = dial.DialCalc()
 
@@ -65,10 +66,10 @@ env.show_gases(lidar_coord)
 wl_laser = np.arange(240, 370, 0.02)
 wl_s1 = utils.wl_shift(wl_laser, main_gases_props.at["N2", "sft"], True)
 wl_s2 = utils.wl_shift(wl_laser, main_gases_props.at["O2", "sft"], True)
-idx_320nm = np.searchsorted(wl_laser, 320)
+# idx_320nm = np.searchsorted(wl_laser, 320)
 
-beta_N2 = betas_N2(lidar_coord.z)*0.1
-beta_O2 = betas_O2(lidar_coord.z)*0.1
+beta_N2 = betas_N2(lidar_coord.z) * 0.1
+beta_O2 = betas_O2(lidar_coord.z) * 0.1
 tau_laser = env.transmittance(lidar_coord, wl_laser)
 tau_s1 = tau_laser * env.transmittance(lidar_coord, wl_s1)
 tau_s2 = tau_laser * env.transmittance(lidar_coord, wl_s2)
@@ -85,119 +86,90 @@ p_s2 = lc.power(
     beta_tau=beta_O2[:, np.newaxis] * tau_s2,
 )
 
-wl_on, wl_off, d_xs_SO2, p_on, p_off, mask = dial.onoff_swapper(
-    wl_s1=wl_s1, 
-    wl_s2=wl_s2, 
-    xs_s1=env.gas_inventory["SO2"].cross_section(wl_s1), 
-    xs_s2=env.gas_inventory["SO2"].cross_section(wl_s2), 
-    p_s1 = p_s1, 
-    p_s2 = p_s2
+obj_s1 = dial.RamanShiftObject(
+    wl_s1, env.gas_inventory["SO2"].cross_section(wl_s1), p_s1
 )
-tau_on = np.where(mask[np.newaxis, :], tau_s1, tau_s2)
-tau_off = np.where(mask[np.newaxis, :], tau_s2, tau_s1)
+obj_s2 = dial.RamanShiftObject(
+    wl_s2, env.gas_inventory["SO2"].cross_section(wl_s2), p_s2
+)
+dial_input = dial.DialInput(
+    obj_s1=obj_s1,
+    obj_s2=obj_s2,
+    lidar_coord=lidar_coord,
+    n_gas=env.number_density_at(lidar_coord.x, 0, lidar_coord.z),
+    aer_absorp_feat=env.aer_absorp_feat,
+    sumN=1,
+    diffN=1,
+)
+results, debug = dc.estimate(dial_input)
+debug.lidar_coord = lidar_coord
+debug.tau_on = np.where(debug.mask[np.newaxis, :], tau_s1, tau_s2)
+debug.tau_off = np.where(debug.mask[np.newaxis, :], tau_s2, tau_s1)
 
-# === DIAL calculation ===
-n_gas = env.number_density_at(lidar_coord.x, 0, lidar_coord.z)
-p_on_R1, p_on_R2, p_off_R1, p_off_R2, dial_dR, dial_coord, n_true = dial.prepare_diff(p_on, p_off, lidar_coord, n_gas)
-res = dc.calc(
-    p_on_R1=p_on_R1,
-    p_on_R2=p_on_R2,
-    p_off_R1=p_off_R1,
-    p_off_R2=p_off_R2,
-    dR=dial_dR[:, np.newaxis],
-    d_xs=d_xs_SO2[np.newaxis, :],
-)
-stat_err = dc.stat_error(
-    p_on_R1=p_on_R1,
-    p_on_R2=p_on_R2,
-    p_off_R1=p_off_R1,
-    p_off_R2=p_off_R2,
-    dR=dial_dR[:, np.newaxis],
-    d_xs=d_xs_SO2[np.newaxis, :],
-)
-correction_factor = dial.calc_dial_correction_factor(
-    env=env,
-    alt=dial_coord.z[:, np.newaxis],
-    wl_on=wl_on[np.newaxis, :],
-    wl_off=wl_off[np.newaxis, :],
-    d_xs=d_xs_SO2[np.newaxis, :],
-)
-
+idx_errmin = np.nanargmin(100 * results.stat_err[-1, :] / results.n_true["SO2"][-1])
 # === test plot ===
 fig1, axes1 = viewer.lidar_equation_result_viewer(
-    coord=lidar_coord,
-    tau_on_dist=tau_on[:, idx_320nm],
-    tau_off_dist=tau_off[:, idx_320nm],
-    p_on_dist=p_on[:, idx_320nm],
-    p_off_dist=p_off[:, idx_320nm],
+    lidar_coord=lidar_coord,
     wl=wl_laser,
-    tau_on_wl=tau_on[-1, :],
-    tau_off_wl=tau_off[-1, :],
-    p_on_wl=p_on[-1, :],
-    p_off_wl=p_off[-1, :],
+    debug=debug,
+    dist_idx=-1,
+    wl_idx=idx_errmin,
 )
 plt.show(block=False)
 
 fig2, axes2 = viewer.dial_equation_result_viewer(
-    env=env,
-    coord=dial_coord,
-    n_true_dist=n_true["SO2"],
-    res1_dist=res[:, idx_320nm],
-    res2_dist=(res - correction_factor)[:, idx_320nm],
-    stat_err_dist=stat_err[:, idx_320nm],
-    wl=wl_laser,
-    n_true_wl=n_true["SO2"][-1],
-    res1_wl=res[-1, :],
-    res2_wl=(res - correction_factor)[-1, :],
-    stat_err_wl=stat_err[-1, :],
+    env=env, wl=wl_laser, results=results, dist_idx=-1, wl_idx=idx_errmin
 )
+plt.show(block=False)
 
 # 信号処理変更
-sumN = 5
-p_on, lidar_coord_new = lidar.signal_swm(lidar_coord, p_on, window_N=sumN, dist_axis=0)
-p_off, _ = lidar.signal_swm(lidar_coord, p_off, window_N=sumN, dist_axis=0)
-n_gas = env.number_density_at(lidar_coord.x, 0, lidar_coord.z)
-n_gas = {k:np_SWV(v, window_shape=sumN).mean(axis=-1) for k, v in n_gas.items()}
-
-p_on_R1, p_on_R2, p_off_R1, p_off_R2, dial_dR, dial_coord, n_true = dial.prepare_diff(p_on, p_off, lidar_coord_new, n_gas, diffN=5)
-
-res = dc.calc(
-    p_on_R1=p_on_R1,
-    p_on_R2=p_on_R2,
-    p_off_R1=p_off_R1,
-    p_off_R2=p_off_R2,
-    dR=dial_dR[:, np.newaxis],
-    d_xs=d_xs_SO2[np.newaxis, :],
-)
-stat_err = dc.stat_error(
-    p_on_R1=p_on_R1,
-    p_on_R2=p_on_R2,
-    p_off_R1=p_off_R1,
-    p_off_R2=p_off_R2,
-    dR=dial_dR[:, np.newaxis],
-    d_xs=d_xs_SO2[np.newaxis, :],
-)
-dial_correction_factor = dial.calc_dial_correction_factor(
-    env=env,
-    alt=dial_coord.z[:, np.newaxis],
-    wl_on=wl_on[np.newaxis, :],
-    wl_off=wl_off[np.newaxis, :],
-    d_xs=d_xs_SO2[np.newaxis, :],
-)
-
+dial_input = replace(dial_input, sumN=5)
+results, debug = dc.estimate(dial_input)
+print(results.n_true["SO2"].shape)
+print(results.coord.z.shape)
+idx_errmin = np.nanargmin(100 * results.stat_err[-1, :] / results.n_true["SO2"][-1])
+print(wl_laser[idx_errmin])
 fig3, axes3 = viewer.dial_equation_result_viewer(
-    env=env,
-    coord=dial_coord,
-    n_true_dist=n_true["SO2"],
-    res1_dist=res[:, idx_320nm],
-    res2_dist=(res - dial_correction_factor)[:, idx_320nm],
-    stat_err_dist=stat_err[:, idx_320nm],
-    wl=wl_laser,
-    n_true_wl=n_true["SO2"][-1],
-    res1_wl=res[-1, :],
-    res2_wl=(res - dial_correction_factor)[-1, :],
-    stat_err_wl=stat_err[-1, :],
+    env=env, wl=wl_laser, results=results, dist_idx=-1, wl_idx=idx_errmin
 )
+
+# res = dc.calc(
+#     p_on_R1=p_on_R1,
+#     p_on_R2=p_on_R2,
+#     p_off_R1=p_off_R1,
+#     p_off_R2=p_off_R2,
+#     dR=dial_dR[:, np.newaxis],
+#     d_xs=d_xs_SO2[np.newaxis, :],
+# )
+# stat_err = dc.stat_error(
+#     p_on_R1=p_on_R1,
+#     p_on_R2=p_on_R2,
+#     p_off_R1=p_off_R1,
+#     p_off_R2=p_off_R2,
+#     dR=dial_dR[:, np.newaxis],
+#     d_xs=d_xs_SO2[np.newaxis, :],
+# )
+# dial_correction_factor = dial.calc_dial_correction_factor(
+#     env=env,
+#     alt=dial_coord.z[:, np.newaxis],
+#     wl_on=wl_on[np.newaxis, :],
+#     wl_off=wl_off[np.newaxis, :],
+#     d_xs=d_xs_SO2[np.newaxis, :],
+# )
+
+# fig3, axes3 = viewer.dial_equation_result_viewer(
+#     env=env,
+#     coord=dial_coord,
+#     n_true_dist=n_true["SO2"],
+#     res1_dist=res[:, idx_320nm],
+#     res2_dist=(res - dial_correction_factor)[:, idx_320nm],
+#     stat_err_dist=stat_err[:, idx_320nm],
+#     wl=wl_laser,
+#     n_true_wl=n_true["SO2"][-1],
+#     res1_wl=res[-1, :],
+#     res2_wl=(res - dial_correction_factor)[-1, :],
+#     stat_err_wl=stat_err[-1, :],
+# )
 
 plt.show(block=False)
 input("PRESS ANY KEY...")

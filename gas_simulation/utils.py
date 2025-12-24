@@ -2,10 +2,10 @@ import numpy as np
 import pandas as pd
 from scipy import constants as const
 from scipy.interpolate import interp1d
+
 from . import package_path, data_dir, data_file
 from .consts import main_gases_props
 from .atom import N
-
 
 def elapsed_time_str(seconds):
     """秒をhh:mm:ss形式の文字列で返す
@@ -20,13 +20,12 @@ def elapsed_time_str(seconds):
     str
         hh:mm:ss形式の文字列
     """
-    seconds = int(seconds + 0.5)  # 秒数を四捨五入
-    h = seconds // 3600  # 時の取得
+    seconds = int(seconds + 0.5)    # 秒数を四捨五入
+    h = seconds // 3600             # 時の取得
     m = (seconds - h * 3600) // 60  # 分の取得
-    s = seconds - h * 3600 - m * 60  # 秒の取得
+    s = seconds - h * 3600 - m * 60 # 秒の取得
 
     return f"{h:02}:{m:02}:{s:02}"  # hh:mm:ss形式の文字列で返す
-
 
 def ppm_to_number_density(ppm, alt):
     return ppm * 1e-6 * N(alt)

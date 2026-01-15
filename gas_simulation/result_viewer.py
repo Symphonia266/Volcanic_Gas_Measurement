@@ -8,7 +8,6 @@ from gas_simulation.lidar_model.utils import Coord
 from gas_simulation.lidar_model import lidar
 from gas_simulation.lidar_model import dial
 
-
 def lidar_equation_result_viewer(
     wl: np.ndarray,
     lidar_coord: Coord,
@@ -71,6 +70,7 @@ def dial_equation_result_viewer(
     env: Environment,
     wl: np.ndarray,
     results: dial.DialResult,
+    cf: np.ndarray,
     dist_idx: int = -1,
     wl_idx: int = 0,
 ):
@@ -121,7 +121,7 @@ def dial_equation_result_viewer(
     ax_dist.errorbar(
         x=results.coord.distance,
         y=utils.number_density_to_ppm(
-            (results.res - results.cf)[:, wl_idx], results.coord.z
+            (results.res - cf)[:, wl_idx], results.coord.z
         ),
         yerr=utils.number_density_to_ppm(results.stat_err[:, wl_idx], results.coord.z),
         capsize=8,
@@ -153,7 +153,7 @@ def dial_equation_result_viewer(
         np.abs(
             100
             * (
-                (results.res - results.cf)[dist_idx, :]
+                (results.res - cf)[dist_idx, :]
                 - results.n_true["SO2"][dist_idx]
             )
             / results.n_true["SO2"][dist_idx]

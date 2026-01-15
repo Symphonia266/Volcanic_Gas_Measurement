@@ -72,14 +72,15 @@ class InstantEnvironment:
         print(f"elapsed time(and multiplier time)   : {utils.elapsed_time_str(time)}")
         print(f"multi. coeff. in aerzol absorptance : {self.aer_absorp_feat:.2f}\n")
 
-    def number_density_at(self, x:Numeric, y:Numeric, z:Numeric)->dict[str, Numeric]:
+    def number_density_at(self, x:Numeric, y:Numeric, z:Numeric, ppm:bool=False)->dict[str, Numeric]:
         x = np.atleast_1d(x)
         n = np.zeros_like(x)
+            
         n_gas = {}
         for key, obj in self.gas_inventory.items():
             mask = self.trig(x)
             n = np.where(mask, obj.Q, obj.offset)
-            n_gas[key] = utils.ppm_to_number_density(n, z)
+            n_gas[key] = n if ppm else utils.ppm_to_number_density(n, z)
         return n_gas
 
     def transmittance(self, coord: Coord, wl: Numeric, *, axes= None)->Numeric:
@@ -171,10 +172,12 @@ class PlumeEnvironment(InstantEnvironment):
         self.source = source
         self.plume_model = PlumeModel(self.field, self.source)
 
-    def number_density_at(self, x:Numeric, y:Numeric, z:Numeric)->dict[str, Numeric]:
+    def number_density_at(self, x:Numeric, y:Numeric, z:Numeric, ppm:bool=False)->dict[str, Numeric]:
         C = self.plume_model.calc(x, y, z, time=self.time)
         gas = {
-            name: utils.ppm_to_number_density(obj.offset + obj.Q * (C), z)
+            name: 
+                (obj.offset + obj.Q *C) if ppm else 
+                utils.ppm_to_number_density((obj.offset + obj.Q * C), z)
             for name, obj in self.gas_inventory.items()
         }
         return gas

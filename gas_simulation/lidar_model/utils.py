@@ -3,6 +3,8 @@ from typing import Self
 from dataclasses import dataclass, field, replace
 
 _UNSET = object()
+
+
 @dataclass
 class Coord:
     distance: np.ndarray
@@ -11,19 +13,20 @@ class Coord:
     z0: float
 
     def __post_init__(self):
-        theta = np.deg2rad(self.theta_deg)
-        self.x:np.ndarray = self.x0 + self.distance * np.cos(theta)
-        self.z:np.ndarray = self.z0 + self.distance * np.sin(theta)
+        theta: float = np.deg2rad(self.theta_deg)
+        self.x: np.ndarray = self.x0 + self.distance * np.cos(theta)
+        self.z: np.ndarray = self.z0 + self.distance * np.sin(theta)
 
     def __getitem__(self, key):
         return self.distance[key], self.x[key], self.z[key]
 
     def with_(
-        self, *,
-        distance: np.ndarray|object=_UNSET,
-        theta_deg: float|object=_UNSET,
-        x0: float|object=_UNSET,
-        z0: float|object=_UNSET,
+        self,
+        *,
+        distance: np.ndarray | object = _UNSET,
+        theta_deg: float | object = _UNSET,
+        x0: float | object = _UNSET,
+        z0: float | object = _UNSET,
     ) -> Self:
         return replace(
             self,

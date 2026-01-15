@@ -10,7 +10,7 @@ class LidarCalc:
         self,
         *,
         dR: float = 5.0,
-        E0: float = 0.1,
+        E0: float = 50.0 * 1e-3, # [J]
         A: float = 0.3,
         M: float = 100 * 60 * 30.0,  # 100 Hz / 1 hour
         eta: float = 0.3,
@@ -22,6 +22,14 @@ class LidarCalc:
         self.eta = eta
         self.M = M
         self.q = q
+    def show_params(self):
+        print(f"LidarCalc parameters:")
+        print(f" dR : {self.dR :<10.0f} [m]")
+        print(f" E0 : {self.E0 :<10.3g} [J]")
+        print(f" A  : {self.A  :<10.2g} [m^2]")
+        print(f" eta: {self.eta:<10.2f}")
+        print(f" M  : {self.M  :<10.3g} [shots]")
+        print(f" q  : {self.q  :<10.2f}\n")
 
     def power(self, dist, wl, beta_tau):
         t1 = (

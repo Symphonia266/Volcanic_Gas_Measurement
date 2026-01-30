@@ -17,3 +17,6 @@ xtick.direction: in
 ytick.direction: in
 xtick.major.width: 1.0
 ytick.major.width: 1.0
+
+# ===== Figure =====
+figure.figsize: 4, 2

@@ -10,6 +10,15 @@ classification_table: list = [
     ["C", "D", "D", "D", "F"],
 ]
 classification_label: list[str] = sorted({x for row in classification_table for x in row})
+classification_label_formatter = lambda lb:lb+_format_labs[lb]
+_format_labs = {
+    "A":"-extremely unstable", 
+    "B":"-moderately unstable", 
+    "C":"-slightly unstable",
+    "D":"-neutral", 
+    "E":"-slightly stable", 
+    "F":"-moderately stable"
+}
 windspeed_thresholds: list = [0.3, 2, 3, 4, 6]
 wether_conditions: dict = {
     "clear": 0,

@@ -29,6 +29,8 @@ from gas_simulation.lidar_model import lidar
 from gas_simulation.lidar_model import dial
 from gas_simulation import result_viewer as viewer
 
+plt.style.use("my_sty.mplstyle")
+
 xs_SO2 = utils.load_cross_section(
     "SO2_VandaeleHermansFally(2009)_358K_227.275-416.658nm.xlsx",
     interp_kwargs={"bounds_error": False, "fill_value": np.nan},
@@ -49,8 +51,8 @@ xs_O3 = utils.load_cross_section(
 # print(xs_H2S(230.9))
 # print(xs_O3(230.9))
 
-t_sec = 60 * 30  # [sec]
-lc = lidar.LidarCalc(M=100 * t_sec)
+T_SEC = 60 * 10  # [sec]
+lc = lidar.LidarCalc(M=100 * T_SEC)
 dc = dial.DialCalc()
 lc.show_params()
 dc.show_params()
@@ -72,7 +74,7 @@ env = InstantEnvironment(
         "H2S": Gas(Q=15, offset=0.035, cross_section=xs_H2S),
         "O3": Gas(Q=0, offset=0.005, cross_section=xs_O3),
     },
-    time=t_sec,
+    time=T_SEC,
     trig=lambda x: ((x >= 300) & (x <= 700)),
 )
 env.show_gases(lidar_coord)
@@ -118,7 +120,6 @@ obj_2 = dial.RamanShiftObject(
 
 res_lb = ["single", "sum5"]
 num = len(res_lb) - 1
-cm_for_case = lambda i: cm.coolwarm(i / num)
 
 input_1 = dial.DialInput(obj_s1=obj_1, obj_s2=obj_2, lidar_coord=lidar_coord, env=env)
 input_2 = input_1.with_(sumN=5)
@@ -143,9 +144,15 @@ analysis: pd.DataFrame = pd.DataFrame(
 
 # idx_trgt = np.nanargmin(res1.stat_err[-1, :])
 idx_wl_trgt = np.searchsorted(wl_laser, 334.58)
-idx_dist_trgt = np.searchsorted(res1.coord.distance, 697)
+# idx_dist_trgt = np.searchsorted(res1.coord.distance, 697)-1
+idx_dist_trgt1 = np.searchsorted(res1.coord.distance, 700)-1
+idx_dist_trgt2 = np.searchsorted(res2.coord.distance, 700)-1
+# idx_dist_trgt = -1
+print(f"{res1.coord.distance[idx_dist_trgt1]:.2f} m selected as target distance for single.")
+print(f"{res2.coord.distance[idx_dist_trgt2]:.2f} m selected as target distance for sumN.")
 
 for lb, res_obj, res_cf, debug_obj in zip(res_lb, [res1, res2], [cf1, cf2], [debug1, debug2]):
+    idx_dist_trgt = np.searchsorted(res_obj.coord.distance, 700)-1
     analysis.loc[lb] = pd.Series(
         {
             "idx": idx_wl_trgt,
@@ -163,70 +170,128 @@ for lb, res_obj, res_cf, debug_obj in zip(res_lb, [res1, res2], [cf1, cf2], [deb
         }
     )
 print(analysis)
-
-fig, ax = plt.subplots(1, 1, layout="constrained")
-# ax_ins = ax.inset_axes([0.6, 0.6, 0.37, 0.37])
-fig2, ax2 = plt.subplots(1, 1, layout="constrained")
+print(res1.coord.distance[idx_dist_trgt1])
+print(res2.coord.distance[idx_dist_trgt2])
 new_coord = lidar_coord.with_(
-    distance=np.linspace(lidar_coord.distance[0], lidar_coord.distance[-1], 1000)
+    distance=np.linspace(
+        lidar_coord.distance[0], 
+        lidar_coord.distance[-1],
+        1000
+    )
 )
-ax.plot(
-    new_coord.distance,
-    env.number_density_at(new_coord.x, 0, new_coord.z, ppm=True)["SO2"],
-    c="darkgrey",
+pt_step = 5
+x1 = res1.coord.distance
+y1_1 = utils.number_density_to_ppm(
+    res1.res[:, idx_wl_trgt] - cf1[:, idx_wl_trgt], 
+    res1.coord.z
 )
-ax.errorbar(
-    x=res1.coord.distance,
-    y=utils.number_density_to_ppm(
-        res1.res[:, idx_wl_trgt] - cf1[:, idx_wl_trgt], res1.coord.z
-    ),
-    yerr=utils.number_density_to_ppm(res1.stat_err[:, idx_wl_trgt], res1.coord.z),
-    capsize=8,
-    fmt="o",
-    markersize=6,
-    zorder=1,
-    ecolor=cm_for_case(1),
-    color=cm_for_case(1),
-    label="single",
-)
-ax.errorbar(
-    x=res2.coord.distance,
-    y=utils.number_density_to_ppm(
-        res2.res[:, idx_wl_trgt] - cf2[:, idx_wl_trgt], res2.coord.z
-    ),
-    yerr=utils.number_density_to_ppm(res2.stat_err[:, idx_wl_trgt], res2.coord.z),
-    capsize=8,
-    fmt="o",
-    markersize=6,
-    zorder=2,
-    ecolor=cm_for_case(0),
-    color=cm_for_case(0),
-    label="summation 5 points",
+y1_2 = utils.number_density_to_ppm(
+    res1.stat_err[:, idx_wl_trgt], 
+    res1.coord.z
 )
 
-ax.set(
-    xlabel="(Line of Sight) distance [m]",
-    ylabel="concentration [ppm]",
-    xlim=(0, lidar_coord.distance.max()),
+x2 = res2.coord.distance
+y2_1 = utils.number_density_to_ppm(
+    res2.res[:, idx_wl_trgt] - cf2[:, idx_wl_trgt], 
+    res2.coord.z
 )
-ax.grid(which="major", ls="-", c="darkgrey")
-ax.grid(which="minor", ls="--", c="lightgrey")
-ax.set_axisbelow(True)
-ax.legend()
+y2_2 = utils.number_density_to_ppm(
+    res2.stat_err[:, idx_wl_trgt], 
+    res2.coord.z
+)
+
+
+fig1 = plt.figure()
+fig1.tight_layout(pad=0.4)
+fig1.subplots_adjust(
+    left=0.08,    # ← 左余白（小さくすると詰まる）
+    right=0.86,   # ← 右余白（legend 領域込み）
+    wspace=0.15   # ← 左右 axes 間隔（効いている）
+)
+gs = GridSpec(
+    nrows=2,
+    ncols=2,
+    figure=fig1,
+    width_ratios=[3.7, 2],
+    height_ratios=[3, 1],
+    left=0.08,
+    right=0.96,   # ← ここが重要（右切れ防止）
+    bottom=0.12,
+    top=0.95,
+    wspace=0.16,
+    hspace=0.15,
+)
+
+ax1 = fig1.add_subplot(gs[:, 0])      # main plot
+ax1_ins = fig1.add_subplot(gs[0, 1])  # zoom (inset-like)
+ax1_leg = fig1.add_subplot(gs[1, 1])  # legend area
+ax1_leg.axis("off")
+
+fig2, ax2 = plt.subplots()
+ax1.grid(False)
+ax1_ins.grid(False)
+ax1_leg.grid(False)
+ax2.grid(False)
+
+def plotter(x1, y1_1, y1_2, x2, y2_1, y2_2, pt_step, ax):
+    ax.plot(
+        new_coord.distance,
+        env.number_density_at(new_coord.x, 0, new_coord.z, ppm=True)["SO2"],
+        c="black",
+        ls="--",
+        label="SO2 setting",
+    )
+    ax.plot(x1, y1_1, c=cm.viridis(0.9))
+    ax.errorbar(
+        x=x1[::pt_step],
+        y=y1_1[::pt_step],
+        yerr=y1_2[::pt_step],
+        capsize=8,
+        fmt="o",
+        markersize=6,
+        zorder=1,
+        ecolor=cm.viridis(0.9),
+        color=cm.viridis(0.9),
+        label=r"$\Delta R$=5 m",
+    )
+    ax.plot(x2, y2_1, c=cm.viridis(0.1))
+    ax.errorbar(
+        x=x2[::pt_step],
+        y=y2_1[::pt_step],
+        yerr=y2_2[::pt_step],
+        capsize=8,
+        fmt="o",
+        markersize=6,
+        zorder=2,
+        ecolor=cm.viridis(0.1),
+        color=cm.viridis(0.1),
+        label=r"$\Delta R$= 25 m",
+    )
+plotter(x1, y1_1, y1_2, x2, y2_1, y2_2, pt_step, ax1)
+plotter(x1, y1_1, y1_2, x2, y2_1, y2_2, pt_step, ax1_ins)
 
 ax2.plot(
     debug1.coord.distance,
     debug1.p_on[:, idx_wl_trgt],
-    marker="o",
+    # marker="o",
     label="single",
     color="darkgrey",
 )
 ax2.plot(
     debug2.coord.distance,
     debug2.p_on[:, idx_wl_trgt],
-    marker="^",
+    # marker="^",
     label="5 points summation for the front and rear",
     color="black",
+)
+
+ax1.set(
+    xlabel="(Line of Sight) distance [m]",
+    ylabel="concentration [ppm]",
+    xlim=(0, lidar_coord.distance.max()),
+)
+ax1_ins.set(
+    xlim=(670, 730),
 )
 ax2.set(
     xlabel="(Line of Sight) distance [m]",
@@ -234,9 +299,32 @@ ax2.set(
     xlim=(0, lidar_coord.distance.max()),
     yscale="log",
 )
-ax2.grid(which="major", ls="-", c="darkgrey")
-ax2.grid(which="minor", ls="--", c="lightgrey")
-ax2.set_axisbelow(True)
-ax2.legend()
+
+handles, labels = ax1.get_legend_handles_labels()
+ax1_leg.legend(
+    handles,
+    labels,
+    loc="center right",   # ← 右側に寄せる
+    bbox_to_anchor=(1.0, 0.01),  # ← 下にずらす（0.0 に近いほど下）
+    frameon=True,
+)
+ax2.legend(loc="upper left")
+# fig1.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
+fig2.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
+
+ext="pdf"
+fig1.savefig(
+    format=ext,
+    dpi=400,
+    bbox_inches="tight",
+    fname="samples/sim_result/sim_02_dR-5m-to-25m." + ext,
+)
+fig2.savefig(
+    format=ext,
+    dpi=400,
+    bbox_inches="tight",
+    fname="samples/sim_result/sim_02_power." + ext,
+)
+
 plt.show(block=False)
 input("PRESS ANY KEY...")

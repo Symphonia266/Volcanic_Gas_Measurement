@@ -21,17 +21,6 @@ from matplotlib.lines import Line2D
 from numpy.lib.stride_tricks import sliding_window_view as np_SWV
 
 # ================================
-# Project path setup
-# ================================
-PROJ_ROOT = Path(__file__).resolve().parent.parent
-BASE_DIR = Path(__file__).resolve().parent
-OUT_DIR = BASE_DIR / "samples" / "sim_result"
-EXT="pdf"
-
-sys.path.append(str(PROJ_ROOT))
-OUT_DIR.mkdir(parents=True, exist_ok=True)
-
-# ================================
 # Project-specific imports
 # ================================
 from gas_simulation import utils
@@ -39,7 +28,6 @@ from gas_simulation import setup
 from gas_simulation.consts import main_gases_props
 from gas_simulation.atom import betas_N2, betas_O2
 from gas_simulation.diffusion_model import pasquill_stable_classfication as PSC
-
 from gas_simulation.model import (
     Field,
     Source,
@@ -53,9 +41,11 @@ from gas_simulation.lidar_model import dial
 from gas_simulation import result_viewer as viewer
 
 # ================================
-# Matplotlib global style
+# Scripts config loading
 # ================================
-plt.style.use("forThesis.mplstyle")
+import config as cfg
+plt.style.use(cfg.MPLSTYLE_PATH)
+cfg.OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ================================
 # Constants
@@ -559,36 +549,36 @@ mark_inset(
     ec="0.5"
 )
 # ax3.indicate_inset_zoom(ax3_ins2)
-fig_pasq_l.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
-fig_pasq_v.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
-fig_env1.set_size_inches(3, 3)
-fig_env2.set_size_inches(3, 3)
-fig2.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
-fig3.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
+# fig_pasq_l.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
+# fig_pasq_v.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
+# fig_env1.set_size_inches(3, 3)
+# fig_env2.set_size_inches(3, 3)
+# fig2.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
+# fig3.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
 
 fig_pasq_l.savefig(
-    fname=str(OUT_DIR/f"sim_04_field_spread_leteral.{EXT}"),
-    format=EXT,
+    fname=str(cfg.OUT_DIR/f"sim_04_field_spread_leteral.{cfg.EXT}"),
+    format=cfg.EXT,
 )
 fig_pasq_v.savefig(
-    fname=str(OUT_DIR/f"sim_04_field_spread_vertical.{EXT}"),
-    format=EXT,
+    fname=str(cfg.OUT_DIR/f"sim_04_field_spread_vertical.{cfg.EXT}"),
+    format=cfg.EXT,
 )
 fig_env1.savefig(
-    fname=str(OUT_DIR/f"sim_04_f2_env_LoS.{EXT}"),
-    format=EXT,
+    fname=str(cfg.OUT_DIR/f"sim_04_f2_env_LoS.{cfg.EXT}"),
+    format=cfg.EXT,
 )
 fig_env2.savefig(
-    fname=str(OUT_DIR/f"sim_04_f2_env_image.{EXT}"),
-    format=EXT,
+    fname=str(cfg.OUT_DIR/f"sim_04_f2_env_image.{cfg.EXT}"),
+    format=cfg.EXT,
 )
 fig2.savefig(
-    fname=str(OUT_DIR/f"sim_04_f2_env_powers.{EXT}"),
-    format=EXT,
+    fname=str(cfg.OUT_DIR/f"sim_04_f2_env_powers.{cfg.EXT}"),
+    format=cfg.EXT,
 )
 fig3.savefig(
-    fname=str(OUT_DIR/f"sim_04_f2_plume_meas.{EXT}"),
-    format=EXT,
+    fname=str(cfg.OUT_DIR/f"sim_04_f2_plume_meas.{cfg.EXT}"),
+    format=cfg.EXT,
 )
 # plt.show(block=False)
 # input("PRESS ANY KEY...")

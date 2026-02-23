@@ -11,18 +11,6 @@ from matplotlib.gridspec import GridSpec
 from matplotlib.lines import Line2D
 from numpy.lib.stride_tricks import sliding_window_view as np_SWV
 
-# ================================
-# Project path setup
-# ================================
-PROJ_ROOT = Path(__file__).resolve().parent.parent
-BASE_DIR = Path(__file__).resolve().parent
-OUT_DIR = BASE_DIR / "samples" / "sim_result"
-EXT="pdf"
-
-sys.path.append(str(PROJ_ROOT))
-OUT_DIR.mkdir(parents=True, exist_ok=True)
-
-
 from gas_simulation import utils
 from gas_simulation.consts import main_gases_props
 from gas_simulation.atom import betas_N2, betas_O2
@@ -33,7 +21,12 @@ from gas_simulation.lidar_model import lidar
 from gas_simulation.lidar_model import dial
 from gas_simulation import result_viewer as viewer
 
-plt.style.use("forThesis.mplstyle")
+# ================================
+# Scripts config loading
+# ================================
+import config as cfg
+plt.style.use(cfg.MPLSTYLE_PATH)
+cfg.OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 xs_SO2 = utils.load_cross_section(
     "SO2_VandaeleHermansFally(2009)_358K_227.275-416.658nm.xlsx",
@@ -271,8 +264,8 @@ fig.subplots_adjust(right=0.8)  # ← 右側に凡例用の余白を確保
 fig_env.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
 # fig.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
 
-fig_env.savefig(str(OUT_DIR / f"sim_02_2_env.{EXT}"), format=EXT)
-fig.savefig(str(OUT_DIR / f"sim_02_2_contami_result.{EXT}"), format=EXT)
+fig_env.savefig(str(cfg.OUT_DIR / f"sim_02_2_env.{cfg.EXT}"), format=cfg.EXT)
+fig.savefig(str(cfg.OUT_DIR / f"sim_02_2_contami_result.{cfg.EXT}"), format=cfg.EXT)
 
 # plt.show(block=False)
 # input("PRESS ANY KEY...")

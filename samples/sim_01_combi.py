@@ -26,18 +26,6 @@ from matplotlib.ticker import LogLocator
 from matplotlib.ticker import ScalarFormatter
 
 # ================================
-# Project path setup
-# ================================
-PROJ_ROOT = Path(__file__).resolve().parent.parent
-BASE_DIR = Path(__file__).resolve().parent
-OUT_DIR = BASE_DIR / "samples" / "sim_result"
-EXT="pdf"
-
-sys.path.append(str(PROJ_ROOT))
-OUT_DIR.mkdir(parents=True, exist_ok=True)
-
-
-# ================================
 # Project-specific imports
 # ================================
 from gas_simulation import utils
@@ -48,11 +36,12 @@ from gas_simulation.lidar_model.utils import Coord
 from gas_simulation.lidar_model import lidar, dial
 
 # ================================
-# Matplotlib global style
+# Scripts config loading
 # ================================
-plt.style.use("forThesis.mplstyle")
-# plt.style.use("forAbst.mplstyle")
-# plt.style.use("forPresen.mplstyle")
+import config as cfg
+plt.style.use(cfg.MPLSTYLE_PATH)
+cfg.OUT_DIR.mkdir(parents=True, exist_ok=True)
+
 # ================================
 # Constants
 # ================================
@@ -262,7 +251,7 @@ for (s1, s2), dial_input in pair_data.items():
     )
 analysis["rank"] = np.argsort(np.argsort(analysis[["stat_err_ppm@end"]].values.flatten()))
 print(analysis.sort_values(by="rank"))
-analysis.to_csv("samples/sim_result/anlysis.csv")
+# analysis.to_csv("samples/sim_result/anlysis.csv")
 
 # ================================
 # Result Printing (Raw text)
@@ -292,7 +281,7 @@ my_cm = lambda i: cm.coolwarm(i / num)
 
 # 受信光子数グラフエリア
 # fig1,ax1 = fig_with_fixed_ax(ax_size=(AX_H, AX_W))
-fig1, ax1 = plt.subplots(figsize=(4,2))
+fig1, ax1 = plt.subplots()
 
 # 測定シミュレーション結果グラフエリア
 # fig2,ax2 = fig_with_fixed_ax(ax_size=(AX_H, AX_W), right=0.68)
@@ -675,15 +664,15 @@ fig6.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
 fig7.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
 fig8.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
 
-fig_env.savefig(str(OUT_DIR / f"sim_01_env_LoS.{EXT}"), format=EXT)
-# fig2.savefig(str(OUT_DIR / f"sim_01_n_SO2_6combies.{EXT}"), format=EXT)
-fig3.savefig(str(OUT_DIR / f"sim_01_contami_error_6combies.{EXT}"), format=EXT)
-fig4.savefig(str(OUT_DIR / f"sim_01_stat_error_6combies.{EXT}"), format=EXT)
-fig5.savefig(str(OUT_DIR / f"sim_01_cond_2case.{EXT}"), format=EXT)
-fig1.savefig(str(OUT_DIR / f"sim_01_power.{EXT}"), format=EXT)
-fig6.savefig(str(OUT_DIR / f"sim_01_3gases_absorp.{EXT}"), format=EXT)
-fig7.savefig(str(OUT_DIR / f"sim_01_6combies_cntm.{EXT}"), format=EXT)
-fig8.savefig(str(OUT_DIR / f"sim_01_6combies_stat.{EXT}"), format=EXT)
+fig_env.savefig(str(cfg.OUT_DIR / f"sim_01_env_LoS.{cfg.EXT}"), format=cfg.EXT)
+# fig2.savefig(str(cfg.OUT_DIR / f"sim_01_n_SO2_6combies.{cfg.EXT}"), format=cfg.EXT)
+fig1.savefig(str(cfg.OUT_DIR / f"sim_01_power.{cfg.EXT}"), format=cfg.EXT)
+fig3.savefig(str(cfg.OUT_DIR / f"sim_01_contami_error_6combies.{cfg.EXT}"), format=cfg.EXT)
+fig4.savefig(str(cfg.OUT_DIR / f"sim_01_stat_error_6combies.{cfg.EXT}"), format=cfg.EXT)
+fig5.savefig(str(cfg.OUT_DIR / f"sim_01_cond_2case.{cfg.EXT}"), format=cfg.EXT)
+fig6.savefig(str(cfg.OUT_DIR / f"sim_01_3gases_absorp.{cfg.EXT}"), format=cfg.EXT)
+fig7.savefig(str(cfg.OUT_DIR / f"sim_01_6combies_cntm.{cfg.EXT}"), format=cfg.EXT)
+fig8.savefig(str(cfg.OUT_DIR / f"sim_01_6combies_stat.{cfg.EXT}"), format=cfg.EXT)
 
 # plt.show(block=False)
 # input("PRESS ANY KEY...")

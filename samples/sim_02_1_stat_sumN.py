@@ -1,9 +1,8 @@
 # coding: utf-8
-from doctest import debug
 import sys
-from turtle import distance
 import numpy as np
 import pandas as pd
+
 from pathlib import Path
 from dataclasses import dataclass
 from itertools import combinations
@@ -12,19 +11,6 @@ from matplotlib import pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib.lines import Line2D
 from numpy.lib.stride_tricks import sliding_window_view as np_SWV
-from pytest import mark
-
-# ================================
-# Project path setup
-# ================================
-PROJ_ROOT = Path(__file__).resolve().parent.parent
-BASE_DIR = Path(__file__).resolve().parent
-OUT_DIR = BASE_DIR / "samples" / "sim_result"
-EXT="pdf"
-
-sys.path.append(str(PROJ_ROOT))
-OUT_DIR.mkdir(parents=True, exist_ok=True)
-
 
 from gas_simulation import utils
 from gas_simulation.consts import main_gases_props
@@ -36,7 +22,15 @@ from gas_simulation.lidar_model import lidar
 from gas_simulation.lidar_model import dial
 from gas_simulation import result_viewer as viewer
 
-plt.style.use("forThesis.mplstyle")
+# ================================
+# Scripts config loading
+# ================================
+# ================================
+# Scripts config loading
+# ================================
+import config as cfg
+plt.style.use(cfg.MPLSTYLE_PATH)
+cfg.OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 xs_SO2 = utils.load_cross_section(
     "SO2_VandaeleHermansFally(2009)_358K_227.275-416.658nm.xlsx",
@@ -321,16 +315,16 @@ ax2.legend(loc="upper left")
 fig2.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
 
 fig_env.savefig(
-    fname=str(OUT_DIR / f"sim_02_1_env.{EXT}"),
-    format=EXT,
+    fname=str(cfg.OUT_DIR / f"sim_02_1_env.{cfg.EXT}"),
+    format=cfg.EXT,
 )
 fig1.savefig(
-    fname=str(OUT_DIR/"sim_02_dR-5mto25m.{EXT}"),
-    format=EXT,
+    fname=str(cfg.OUT_DIR/ f"sim_02_dR-5mto25m.{cfg.EXT}"),
+    format=cfg.EXT,
 )
 fig2.savefig(
-    fname=str(OUT_DIR/f"sim_02_power.{EXT}"),
-    format=EXT,
+    fname=str(cfg.OUT_DIR/f"sim_02_power.{cfg.EXT}"),
+    format=cfg.EXT,
 )
 
 # plt.show(block=False)

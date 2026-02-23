@@ -1,0 +1,22 @@
+# ==== Font ======
+font.family: sans-serif
+font.size: 8
+
+# ===== Axes =====
+axes.linewidth: 1.0
+axes.axisbelow: True
+axes.grid: False
+
+# ===== Major grid =====
+grid.color: darkgrey
+grid.linestyle: -
+grid.linewidth: 0.8
+
+# ===== Ticks =====
+xtick.direction: in
+ytick.direction: in
+xtick.major.width: 1.0
+ytick.major.width: 1.0
+
+# ===== Figure =====
+figure.figsize: 4, 2

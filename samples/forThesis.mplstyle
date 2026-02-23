@@ -1,0 +1,39 @@
+# ================= Font =================
+font.family: serif
+font.size: 10
+
+# 欧文（Latin）
+font.serif: Arial, CMU Serif, Computer Modern Roman
+
+# 和文（Japanese: fallback）
+font.sans-serif: IPAexMincho, Hiragino Mincho Pro, Yu Mincho
+
+# ================= Axes =================
+axes.linewidth: 0.8
+axes.axisbelow: True
+axes.grid: False
+
+# ================= Ticks =================
+xtick.direction: in
+ytick.direction: in
+xtick.major.width: 0.8
+ytick.major.width: 0.8
+xtick.minor.visible: True
+ytick.minor.visible: True
+xtick.minor.width: 0.6
+ytick.minor.width: 0.6
+
+# ================= Grid (optional) ========
+grid.color: 0.85
+grid.linestyle: --
+grid.linewidth: 0.5
+
+# ================= Figure =================
+figure.figsize: 4, 3
+figure.dpi: 300
+
+# ================= Save =================
+savefig.dpi: 400
+savefig.bbox: tight
+savefig.pad_inches: 0.02
+savefig.transparent: False

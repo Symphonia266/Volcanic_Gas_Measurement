@@ -1,7 +1,6 @@
 # ================================
 # Standard library imports
 # ================================
-from ctypes import util
 import sys
 from pathlib import Path
 from dataclasses import dataclass
@@ -11,8 +10,6 @@ from dataclasses import dataclass
 # ================================
 import numpy as np
 import pandas as pd
-from scipy.interpolate import interp1d
-from scipy.integrate import trapezoid as trpz
 
 from matplotlib import cm, ticker
 from matplotlib import pyplot as plt
@@ -25,16 +22,9 @@ from numpy.lib.stride_tricks import sliding_window_view as np_SWV
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 # ================================
-# Project path setup
-# ================================
-# プロジェクトルートを sys.path に追加
-# __file__ = samples/a.py
-project_root = Path(__file__).resolve().parent.parent
-sys.path.append(str(project_root))
-
-# ================================
 # Project-specific imports
 # ================================
+import config as cfg
 from gas_simulation import utils
 from gas_simulation.consts import main_gases_props
 from gas_simulation.atom import betas_N2, betas_O2
@@ -48,7 +38,8 @@ from gas_simulation import result_viewer as viewer
 # ================================
 # Matplotlib global style
 # ================================
-plt.style.use("forThesis.mplstyle")
+plt.style.use(cfg.MPLSTYLE_PATH)
+cfg.OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ================================
 # Cross sections
@@ -266,9 +257,21 @@ if __name__ == "__main__":
         ylim=(0, None)
     )
 
-    fig.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
-    fig2.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
-    fig3.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
+    # fig.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
+    # fig2.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
+    # fig3.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
+    fig.savefig(
+        fname=str(cfg.OUT_DIR / f"sim_05_Amplitude.{cfg.EXT}"), 
+        format=cfg.EXT
+    )
+    fig2.savefig(
+        fname=str(cfg.OUT_DIR / f"sim_05_Filter_Spec.{cfg.EXT}"), 
+        format=cfg.EXT
+    )
+    fig3.savefig(
+        fname=str(cfg.OUT_DIR / f"sim_05_SO2_Spec.{cfg.EXT}"), 
+        format=cfg.EXT
+    )
     plt.show(block=False)
     input()
 

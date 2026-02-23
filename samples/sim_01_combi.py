@@ -584,61 +584,61 @@ ax8.set(
     # ylim=(1e-1, 1e1),
 )
 
-# ax_env.legend(
-#     bbox_to_anchor=(1.02, 1.0),
-#     borderaxespad=0,
-#     loc="upper left",
-#     frameon=True,
-# )
-# ax1.legend(
-#     bbox_to_anchor=(0.98,0.98),
-#     borderaxespad=0,
-#     loc="upper right",
-#     handles=fig1_handles,
-#     frameon=True,
-# )
-# ax2.legend(
-#     bbox_to_anchor=(1.02, 1),
-#     borderaxespad=0,
-#     loc="upper left",
-#     handles=fig2_handles,
-#     frameon=True,
-# )
-# ax3.legend(
-#     bbox_to_anchor=(1.02, 1),
-#     borderaxespad=0,
-#     loc="upper left",
-#     handles=color_handles,
-#     frameon=True,
-# )
-# ax4.legend(
-#     bbox_to_anchor=(1.02, 1),
-#     borderaxespad=0,
-#     loc="upper left",
-#     handles=color_handles,
-#     frameon=True,
-# )
-# ax7.legend(
-#     bbox_to_anchor=(1.02, 1),
-#     borderaxespad=0,
-#     loc="upper left",
-#     handles=fig2_handles,
-#     frameon=True,
-# )
-# ax7.legend(
-#     bbox_to_anchor=(1.02, 1),
-#     borderaxespad=0,
-#     loc="upper left",
-#     handles=fig2_handles,
-#     frameon=True,
-# )
-# ax8.legend(
-#     bbox_to_anchor=(1.02, 1),
-#     borderaxespad=0,
-#     loc="upper left",
-#     handles=fig2_handles,
-#     frameon=True,
-# )
+ax_env.legend(
+    bbox_to_anchor=(1.02, 1.0),
+    borderaxespad=0,
+    loc="upper left",
+    frameon=True,
+)
+ax1.legend(
+    bbox_to_anchor=(0.98,0.98),
+    borderaxespad=0,
+    loc="upper right",
+    handles=fig1_handles,
+    frameon=True,
+)
+ax2.legend(
+    bbox_to_anchor=(1.02, 1),
+    borderaxespad=0,
+    loc="upper left",
+    handles=fig2_handles,
+    frameon=True,
+)
+ax3.legend(
+    bbox_to_anchor=(1.02, 1),
+    borderaxespad=0,
+    loc="upper left",
+    handles=color_handles,
+    frameon=True,
+)
+ax4.legend(
+    bbox_to_anchor=(1.02, 1),
+    borderaxespad=0,
+    loc="upper left",
+    handles=color_handles,
+    frameon=True,
+)
+ax7.legend(
+    bbox_to_anchor=(1.02, 1),
+    borderaxespad=0,
+    loc="upper left",
+    handles=fig2_handles,
+    frameon=True,
+)
+ax7.legend(
+    bbox_to_anchor=(1.02, 1),
+    borderaxespad=0,
+    loc="upper left",
+    handles=fig2_handles,
+    frameon=True,
+)
+ax8.legend(
+    bbox_to_anchor=(1.02, 1),
+    borderaxespad=0,
+    loc="upper left",
+    handles=fig2_handles,
+    frameon=True,
+)
 
 # ================================
 # Final output
@@ -654,15 +654,15 @@ ax5.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
 ax5.yaxis.set_major_locator(ticker.MaxNLocator(integer=True))
 ax5.ticklabel_format(style="sci", axis="y", scilimits=(0, 0))
 
-fig_env.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
-fig1.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
-fig2.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
-fig3.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
-fig4.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
-fig5.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
-fig6.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
-fig7.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
-fig8.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
+# fig_env.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
+# fig1.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
+# fig2.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
+# fig3.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
+# fig4.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
+# fig5.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
+# fig6.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
+# fig7.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
+# fig8.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
 
 fig_env.savefig(str(cfg.OUT_DIR / f"sim_01_env_LoS.{cfg.EXT}"), format=cfg.EXT)
 # fig2.savefig(str(cfg.OUT_DIR / f"sim_01_n_SO2_6combies.{cfg.EXT}"), format=cfg.EXT)

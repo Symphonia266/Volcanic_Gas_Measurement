@@ -138,7 +138,7 @@ class InstantEnvironment:
         # ax.grid(which="major", ls="-", c="darkgrey")
         ax.grid(False)
         new_coord = coord.with_(
-            distance=np.linspace(coord.distance.min(), coord.distance.max(), 1000)
+            distance=np.linspace(0, coord.distance.max(), 1000)
         )
         
         gas = self.number_density_at(new_coord.x, 0, new_coord.z)
@@ -156,10 +156,11 @@ class InstantEnvironment:
             idx_peak, n_peak = n_ppm.argmax(), n_ppm[n_ppm.argmax()]
             idx_idle, n_idle = n_ppm.argmin(), n_ppm[n_ppm.argmin()]
             
+            s_peak = f"({n_peak:.2g} ppm)" if n_peak<10 else f"({n_peak:.0f} ppm)"
             ax.text(
                 x=new_coord.distance[idx_peak]+2,
                 y=n_peak,
-                s=f"({n_peak:.2g} ppm)", 
+                s=s_peak, 
                 ha="left",
                 va="bottom"
             )
@@ -168,10 +169,8 @@ class InstantEnvironment:
         ax.set(
             xlabel="Distance [m]",
             ylabel="Concentration [ppm]",
-            xlim = (new_coord.x.min(), new_coord.x.max()),
-            ylim = (0, None),
+            xlim = (0, new_coord.x.max()),
         )
-        ax.legend()
         # return ax
 
     def show_gases(self, coord: Coord):
@@ -204,7 +203,7 @@ class PlumeEnvironment(InstantEnvironment):
         }
         return gas
 
-    def plot_diffuse_map_gases(self, ax:Axes, coord:Coord)->AxesImage:
+    def plot_diffuse_map_gases(self, ax:Axes, coord:Coord, *, vmax=1e-6 , vmin=0)->AxesImage:
         # ax.grid(which="minor", ls="--", c="lightgrey")
         # ax.grid(which="major", ls="-", c="darkgrey")
         ax.grid(False)
@@ -224,6 +223,8 @@ class PlumeEnvironment(InstantEnvironment):
             extent=[x.min(), x.max(), y.min(), y.max()],
             aspect="equal",
             cmap="jet",
+            vmax=vmax,
+            vmin=vmin
         )
         ax.set_title(f"altitude:{coord.z0} m")
         ax.set(

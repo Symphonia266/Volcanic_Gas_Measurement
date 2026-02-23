@@ -1,6 +1,7 @@
 # ================================
 # Standard library imports
 # ================================
+from operator import xor
 import sys
 from pathlib import Path
 from itertools import combinations
@@ -16,23 +17,25 @@ from matplotlib import cm, ticker
 from matplotlib import pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib.lines import Line2D
-from matplotlib.ticker import LogLocator
-from matplotlib.ticker import ScalarFormatter
 
 from numpy.lib.stride_tricks import sliding_window_view as np_SWV
 
 # ================================
 # Project path setup
 # ================================
-# プロジェクトルートを sys.path に追加
-# __file__ = samples/a.py
-project_root = Path(__file__).resolve().parent.parent
-sys.path.append(str(project_root))
+PROJ_ROOT = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent
+OUT_DIR = BASE_DIR / "samples" / "sim_result"
+EXT="pdf"
+
+sys.path.append(str(PROJ_ROOT))
+OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ================================
 # Project-specific imports
 # ================================
 from gas_simulation import utils
+from gas_simulation import setup
 from gas_simulation.consts import main_gases_props
 from gas_simulation.atom import betas_N2, betas_O2
 from gas_simulation.diffusion_model import pasquill_stable_classfication as PSC
@@ -52,56 +55,18 @@ from gas_simulation import result_viewer as viewer
 # ================================
 # Matplotlib global style
 # ================================
-plt.style.use("my_sty.mplstyle")
+plt.style.use("forThesis.mplstyle")
 
 # ================================
 # Constants
 # ================================
-T_SEC = 60 * 30
-
-
-# ================================
-# Utility functions
-# ================================
-def fig_with_fixed_ax(
-    ax_size: tuple[float, float], left=0.15, right=0.95, bottom=0.1, top=0.98
-):
-    fig_w = ax_size[0] / (right - left)
-    fig_h = ax_size[1] / (top - bottom)
-    fig = plt.figure(figsize=(fig_w, fig_h))
-    ax = fig.add_axes([left, bottom, right - left, top - bottom])
-    return fig, ax
-
-
-def plt_log_mode(ax):
-    ax.set_yscale("log")
-    # plt.grid(which='major',color='black',linestyle='-')
-    # plt.grid(which='minor',color='lightgrey',linestyle='--', axis="y")
-    ax.yaxis.set_minor_locator(LogLocator(base=10, subs="auto"))
-    ax.grid(which="minor", ls="--", c="lightgrey", axis="y")
-    return ax
-
-
+T_SEC = 60 * 10
 lbs = lambda s1, s2: f"{s1}, {s2}"
 
 # ================================
 # Cross sections
 # ================================
-xs_SO2 = utils.load_cross_section(
-    "SO2_VandaeleHermansFally(2009)_358K_227.275-416.658nm.xlsx",
-    interp_kwargs={"bounds_error": False, "fill_value": np.nan},
-    effective=True,
-)
-xs_H2S = utils.load_cross_section(
-    "H2S_Grosch(2015)_423.2K_198-370nm.xlsx",
-    interp_kwargs={"bounds_error": False, "fill_value": np.nan},
-    effective=True,
-)
-xs_O3 = utils.load_cross_section(
-    "O3_Bogumil(2003)_293K_230-1070nm.xlsx",
-    interp_kwargs={"bounds_error": False, "fill_value": np.nan},
-    effective=True,
-)
+xs_SO2, xs_H2S, xs_O3 = setup.xses_setup(eff=True)
 
 # ================================
 # Lidar / DIAL setup
@@ -112,7 +77,7 @@ lc.show_params()
 dc.show_params()
 
 lidar_coord = Coord(
-    distance=np.arange(5, 200, 5),
+    distance=np.arange(5, 200, lc.dR),
     theta_deg=0.0,
     x0=0,
     z0=1000,
@@ -159,25 +124,18 @@ env = PlumeEnvironment(
         # "SO2": Gas(Q=80e5, offset=0, cross_section=xs_SO2),
         # "H2S": Gas(Q=40e5, offset=0, cross_section=xs_H2S),
         # 今回の煙源位置、風プロファイル設定で30ppm程度になるよう調整したQ
-        "SO2": Gas(Q=30e6, offset=0, cross_section=xs_SO2),
-        "H2S": Gas(Q=7.5e6, offset=0, cross_section=xs_H2S),
+        "SO2": Gas(Q=60e5, offset=0, cross_section=xs_SO2),
+        "H2S": Gas(Q=30e5, offset=0, cross_section=xs_H2S),
         "O3": Gas(Q=0, offset=0.005, cross_section=xs_O3),
     },
 )
-fig_env1, _, fig_env2, _ = env.show_gases(lidar_coord)
+fig_env1, ax_env1, fig_env2, ax_env2 = env.show_gases(lidar_coord)
 
 # ================================
 # Wavelength definitions
 # ================================
-wl_laser = np.arange(240, 370, 0.02)
-wl_laser = np.arange(240, 370, 0.02)
-wl = {
-    "laser": wl_laser,
-    "N2_st": utils.wl_shift(wl_laser, main_gases_props.at["N2", "sft"], False),
-    "O2_st": utils.wl_shift(wl_laser, main_gases_props.at["O2", "sft"], False),
-    "N2_as": utils.wl_shift(wl_laser, main_gases_props.at["N2", "sft"], True),
-    "O2_as": utils.wl_shift(wl_laser, main_gases_props.at["O2", "sft"], True),
-}
+wl_ls = np.arange(240, 370, 0.02)
+wl = setup.wls_setup(wl_ls)
 
 # ================================
 # Backscatter and transmission
@@ -198,7 +156,7 @@ beta_tau = {
 p = {
     k: lc.power(
         dist=lidar_coord.distance[:, np.newaxis],
-        wl=wl_laser[np.newaxis, :],
+        wl=wl_ls[np.newaxis, :],
         beta_tau=v,
     )
     for k, v, in beta_tau.items()
@@ -258,7 +216,7 @@ for (s1, s2), dial_input in pair_data.items():
     analysis.loc[f"{s1}-{s2}"] = pd.Series(
         {
             "idx": idx_wl_trgt,
-            "wl_ls": wl_laser[idx_wl_trgt],
+            "wl_ls": wl_ls[idx_wl_trgt],
             "wl_on": results[(s1, s2)].wl_on[idx_wl_trgt],
             "wl_off": results[(s1, s2)].wl_off[idx_wl_trgt],
             "stat_err_ppm": utils.number_density_to_ppm(
@@ -266,7 +224,7 @@ for (s1, s2), dial_input in pair_data.items():
                 results[(s1, s2)].coord.z[-1],
             ),
             "contam_err_ppm": utils.number_density_to_ppm(
-                results[(s1, s2)].res[-1, idx_wl_trgt] - cfs[(s1, s2)][-1, idx_wl_trgt],
+                results[(s1, s2)].res[-1, idx_wl_trgt],
                 results[(s1, s2)].coord.z[-1],
             ),
             "d_xs": debug[(s1, s2)].d_xs[idx_wl_trgt],
@@ -283,7 +241,7 @@ print(analysis.sort_values(by="rank"))
 #     lb = f"{s1}-{s2}"
 #     i = analysis.at[lb, "rank"]
 #     idx_trgt = int(analysis.at[lb, "idx"])
-#     # idx_trgt = np.searchsorted(wl_laser, 320.0)
+#     # idx_trgt = np.searchsorted(wl_ls, 320.0)
 #     cond = analysis.at[lb, "wl_on"] < analysis.at[lb, "wl_off"]
 #     txt_wl_ls = f"{analysis.at[lb, "wl_ls"]:.2f}"
 #     txt_on = f"on :{analysis.at[lb, "wl_on"]:.1f} nm"
@@ -321,21 +279,23 @@ ax3_ins1 = ax3.inset_axes([0.45, 0.45, 0.52, 0.52])
 ax3.grid(False)
 ax3_ins1.grid(False)
 
-plt_log_mode(ax_err1_wl)
-plt_log_mode(ax_err2_wl)
-plt_log_mode(ax2)
+utils.plt_log_mode(ax_err1_wl)
+utils.plt_log_mode(ax_err2_wl)
+utils.plt_log_mode(ax2)
 
 num = len(pair_data.keys()) - 1
 my_cm = lambda i: cm.coolwarm(i / num)
 
 for (s1, s2), res_obj in results.items():
-    lb = f"{s1}-{s2}"
-    i = analysis.at[lb, "rank"]
-    idx_trgt = int(analysis.at[lb, "idx"])
-    # idx_trgt = np.searchsorted(wl_laser, 320.0)
 
+    lb = f"{s1}-{s2}"
+    if not ((s1=="O2_st") and (s2=="O2_as")): continue
+    # i = analysis.at[lb, "rank"]
+    i = 0
+    idx_trgt = int(analysis.at[lb, "idx"])
+    # idx_trgt = np.searchsorted(wl_ls, 320.0)
     n_dist = utils.number_density_to_ppm(
-        res_obj.res[:, idx_trgt] - cfs[(s1, s2)][:, idx_trgt], 
+        res_obj.res[:, idx_trgt], 
         res_obj.coord.z
     )
     stat_err_dist = utils.number_density_to_ppm(
@@ -344,7 +304,7 @@ for (s1, s2), res_obj in results.items():
     )
 
     contam_err_wl = utils.number_density_to_ppm(
-        res_obj.res[-1, :] - cfs[(s1, s2)][-1, :] - res_obj.n_true["SO2"][-1],
+        res_obj.res[-1, :] - res_obj.n_true["SO2"][-1],
         res_obj.coord.z[-1],
     )
     stat_err_wl = utils.number_density_to_ppm(
@@ -364,14 +324,14 @@ for (s1, s2), res_obj in results.items():
         zorder=num - i,
     )
     ax_err1_wl.plot(
-        wl_laser,
+        wl_ls,
         np.abs(contam_err_wl),
         color=my_cm(i),
         label=f"{s1}-{s2}",
         zorder=num - i,
     )
     ax_err2_wl.plot(
-        wl_laser,
+        wl_ls,
         np.abs(stat_err_wl),
         color=my_cm(i),
         label=f"{s1}-{s2}",
@@ -401,6 +361,18 @@ for (s1, s2), res_obj in results.items():
     ax3.plot(
         res_obj.coord.distance,
         n_dist,
+        ls="-",
+        # marker="o", 
+        color=my_cm(i),
+        label=f"{s1}-{s2}",
+        zorder=num - i,
+        clip_on=False
+    )
+    ax3_ins1.plot(
+        res_obj.coord.distance,
+        n_dist,
+        marker="o", 
+        ls="-",
         color=my_cm(i),
         label=f"{s1}-{s2}",
         zorder=num - i,
@@ -418,13 +390,6 @@ for (s1, s2), res_obj in results.items():
     #     zorder=num - i,
     # )
 
-    ax3_ins1.plot(
-        res_obj.coord.distance,
-        n_dist,
-        color=my_cm(i),
-        label=f"{s1}-{s2}",
-        zorder=num - i,
-    )
     # ax3_ins1.errorbar(
     #     x=res_obj.coord.distance,
     #     y=n_dist,
@@ -467,12 +432,16 @@ ax3.plot(
     new_coord.distance,
     env.number_density_at(new_coord.x, 0, new_coord.z, ppm=True)["SO2"],
     c="black",
+    ls="--"
 )
 ax3_ins1.plot(
     new_coord.distance,
     env.number_density_at(new_coord.x, 0, new_coord.z, ppm=True)["SO2"],
     c="black",
+    ls="--"
 )
+
+
 # ax3_ins2.plot(
 #     new_coord.distance,
 #     env.number_density_at(new_coord.x, 0, new_coord.z, ppm=True)["SO2"],
@@ -537,7 +506,8 @@ ax_dist.set(
 ax_err1_wl.set_ylabel(r"Contamination error $\varepsilon$ [ppm]")
 ax_err2_wl.set_ylabel(r"Statistical error $\Delta n$ [ppm]")
 ax_err2_wl.set_xlabel("Laser wavelength [nm]")
-
+ax_env1.set_ylim(0, 120)
+# ax_env1.set_ylim(0, 120)
 ax2.set(
     xlabel="(Line of Sight) distance [m]", 
     ylabel=r"Received power $P_{phot}$"
@@ -546,13 +516,22 @@ ax3.set(
     xlabel="(Line of Sight) distance [m]",
     ylabel=r"SO$_2$ Concentration [ppm]",
     xlim=(0, lidar_coord.distance[-1]),
-    ylim=(0, None),
+    ylim=(0, 110),
 )
-ax3_ins1.set(xlim=[30, 70], ylim=[0, None])
+# ax3_ins1.set(xlim=[46,54], ylim=[70, 105])
+ax3_ins1.set(xlim=[45,55], ylim=[0, 75])
 # ax3_ins2.set(xlim=[300, 500], ylim=[0, 2])
 
-ax_pasq_l.legend()
-ax_pasq_v.legend()
+ax_pasq_l.legend(
+    bbox_to_anchor=(1.02, 1),
+    borderaxespad=0,
+    loc="upper left",
+)
+ax_pasq_v.legend(
+    bbox_to_anchor=(1.02, 1),
+    borderaxespad=0,
+    loc="upper left",
+)
 
 ax_dist.legend(
     handles=fig1_handles, loc="upper right", frameon=True
@@ -562,13 +541,13 @@ ax2.legend(
     loc="upper right",
     frameon=True,
 )
-ax3.legend(
-    bbox_to_anchor=(1.02, 1),
-    borderaxespad=0,
-    loc="upper left",
-    handles=fig1_handles,
-    frameon=True,
-)
+# ax3.legend(
+#     bbox_to_anchor=(1.02, 1),
+#     borderaxespad=0,
+#     loc="upper left",
+#     handles=fig1_handles,
+#     frameon=True,
+# )
 
 from mpl_toolkits.axes_grid1.inset_locator import mark_inset
 mark_inset(
@@ -582,47 +561,34 @@ mark_inset(
 # ax3.indicate_inset_zoom(ax3_ins2)
 fig_pasq_l.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
 fig_pasq_v.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
+fig_env1.set_size_inches(3, 3)
+fig_env2.set_size_inches(3, 3)
 fig2.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
 fig3.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
 
-ext="pdf"
 fig_pasq_l.savefig(
-    format=ext,
-    dpi=400,
-    bbox_inches="tight",
-    fname="samples/sim_result/sim_04_field_spread_leteral." + ext,
+    fname=str(OUT_DIR/f"sim_04_field_spread_leteral.{EXT}"),
+    format=EXT,
 )
 fig_pasq_v.savefig(
-    format=ext,
-    dpi=400,
-    bbox_inches="tight",
-    fname="samples/sim_result/sim_04_field_spread_vertical." + ext,
+    fname=str(OUT_DIR/f"sim_04_field_spread_vertical.{EXT}"),
+    format=EXT,
 )
-fig_env1.set_size_inches(3, 3)
-fig_env2.set_size_inches(3, 3)
 fig_env1.savefig(
-    format=ext,
-    dpi=400,
-    bbox_inches="tight",
-    fname="samples/sim_result/sim_04_env_LoS." + ext,
+    fname=str(OUT_DIR/f"sim_04_f2_env_LoS.{EXT}"),
+    format=EXT,
 )
 fig_env2.savefig(
-    format=ext,
-    dpi=400,
-    bbox_inches="tight",
-    fname="samples/sim_result/sim_04_env_image." + ext,
+    fname=str(OUT_DIR/f"sim_04_f2_env_image.{EXT}"),
+    format=EXT,
 )
 fig2.savefig(
-    format=ext,
-    dpi=400,
-    bbox_inches="tight",
-    fname="samples/sim_result/sim_04_powers." + ext,
+    fname=str(OUT_DIR/f"sim_04_f2_env_powers.{EXT}"),
+    format=EXT,
 )
 fig3.savefig(
-    format=ext,
-    dpi=400,
-    bbox_inches="tight",
-    fname="samples/sim_result/sim_04_plume_meas." + ext,
+    fname=str(OUT_DIR/f"sim_04_f2_plume_meas.{EXT}"),
+    format=EXT,
 )
-plt.show(block=False)
-input("PRESS ANY KEY...")
+# plt.show(block=False)
+# input("PRESS ANY KEY...")

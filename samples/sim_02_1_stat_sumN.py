@@ -14,10 +14,17 @@ from matplotlib.lines import Line2D
 from numpy.lib.stride_tricks import sliding_window_view as np_SWV
 from pytest import mark
 
-# プロジェクトルートを sys.path に追加
-# __file__ = samples/a.py
-project_root = Path(__file__).resolve().parent.parent
-sys.path.append(str(project_root))
+# ================================
+# Project path setup
+# ================================
+PROJ_ROOT = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent
+OUT_DIR = BASE_DIR / "samples" / "sim_result"
+EXT="pdf"
+
+sys.path.append(str(PROJ_ROOT))
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+
 
 from gas_simulation import utils
 from gas_simulation.consts import main_gases_props
@@ -29,7 +36,7 @@ from gas_simulation.lidar_model import lidar
 from gas_simulation.lidar_model import dial
 from gas_simulation import result_viewer as viewer
 
-plt.style.use("my_sty.mplstyle")
+plt.style.use("forThesis.mplstyle")
 
 xs_SO2 = utils.load_cross_section(
     "SO2_VandaeleHermansFally(2009)_358K_227.275-416.658nm.xlsx",
@@ -77,7 +84,7 @@ env = InstantEnvironment(
     time=T_SEC,
     trig=lambda x: ((x >= 300) & (x <= 700)),
 )
-env.show_gases(lidar_coord)
+fig_env, ax_env = env.show_gases(lidar_coord)
 
 wl_laser = np.arange(240, 370, 0.02)
 wl = {
@@ -192,7 +199,7 @@ y1_2 = utils.number_density_to_ppm(
 
 x2 = res2.coord.distance
 y2_1 = utils.number_density_to_ppm(
-    res2.res[:, idx_wl_trgt] - cf2[:, idx_wl_trgt], 
+    res2.res[:, idx_wl_trgt], 
     res2.coord.z
 )
 y2_2 = utils.number_density_to_ppm(
@@ -285,6 +292,7 @@ ax2.plot(
     color="black",
 )
 
+ax_env.set_ylim(0, 110)
 ax1.set(
     xlabel="(Line of Sight) distance [m]",
     ylabel="concentration [ppm]",
@@ -312,19 +320,18 @@ ax2.legend(loc="upper left")
 # fig1.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
 fig2.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
 
-ext="pdf"
+fig_env.savefig(
+    fname=str(OUT_DIR / f"sim_02_1_env.{EXT}"),
+    format=EXT,
+)
 fig1.savefig(
-    format=ext,
-    dpi=400,
-    bbox_inches="tight",
-    fname="samples/sim_result/sim_02_dR-5m-to-25m." + ext,
+    fname=str(OUT_DIR/"sim_02_dR-5mto25m.{EXT}"),
+    format=EXT,
 )
 fig2.savefig(
-    format=ext,
-    dpi=400,
-    bbox_inches="tight",
-    fname="samples/sim_result/sim_02_power." + ext,
+    fname=str(OUT_DIR/f"sim_02_power.{EXT}"),
+    format=EXT,
 )
 
-plt.show(block=False)
-input("PRESS ANY KEY...")
+# plt.show(block=False)
+# input("PRESS ANY KEY...")

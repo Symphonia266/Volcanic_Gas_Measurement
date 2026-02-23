@@ -5,7 +5,7 @@ font.size: 8
 # ===== Axes =====
 axes.linewidth: 1.0
 axes.axisbelow: True
-axes.grid: True
+axes.grid: False
 
 # ===== Major grid =====
 grid.color: darkgrey

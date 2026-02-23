@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 from scipy import constants as const
 from scipy.interpolate import interp1d
+from matplotlib.ticker import LogLocator
+from matplotlib.ticker import ScalarFormatter
 
 from . import package_path, data_dir, data_file
 from .consts import main_gases_props
@@ -286,7 +288,7 @@ def effective(
     spec = np.linspace(-spec_sideband, spec_sideband, N)
 
     weight = gaus(spec, **gaus_kwargs)
-    weight = weight / weight.sum()
+    weight /= weight.sum()
 
     xx = x[..., :, np.newaxis] + spec[np.newaxis, :]
 
@@ -371,7 +373,13 @@ def load_cross_section_dict(mapping, *, interp_kwargs=None, **read_kwargs):
         for k, v in mapping.items()
     }
 
-
+def plt_log_mode(ax):
+    ax.set_yscale("log")
+    # plt.grid(which='major',color='black',linestyle='-')
+    # plt.grid(which='minor',color='lightgrey',linestyle='--', axis="y")
+    ax.yaxis.set_minor_locator(LogLocator(base=10, subs="auto"))
+    ax.grid(which="minor", ls="--", c="lightgrey", axis="y")
+    return ax
 class Subject:
     """変更通知機能を持つ Subject"""
 

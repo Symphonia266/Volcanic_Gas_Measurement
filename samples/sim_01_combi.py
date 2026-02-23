@@ -28,8 +28,14 @@ from matplotlib.ticker import ScalarFormatter
 # ================================
 # Project path setup
 # ================================
-project_root = Path(__file__).resolve().parent.parent
-sys.path.append(str(project_root))
+PROJ_ROOT = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent
+OUT_DIR = BASE_DIR / "samples" / "sim_result"
+EXT="pdf"
+
+sys.path.append(str(PROJ_ROOT))
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+
 
 # ================================
 # Project-specific imports
@@ -45,6 +51,8 @@ from gas_simulation.lidar_model import lidar, dial
 # Matplotlib global style
 # ================================
 plt.style.use("forThesis.mplstyle")
+# plt.style.use("forAbst.mplstyle")
+# plt.style.use("forPresen.mplstyle")
 # ================================
 # Constants
 # ================================
@@ -109,7 +117,7 @@ xs_O3 = utils.load_cross_section(
 lc = lidar.LidarCalc(M=100 * T_SEC)
 dc = dial.DialCalc()
 lidar_coord = Coord(
-    distance=np.arange(lc.dR, 1000, lc.dR),
+    distance=np.arange(lc.dR, 1000+lc.dR, lc.dR),
     theta_deg=0.0,
     x0=0,
     z0=1000,
@@ -205,8 +213,10 @@ analysis: pd.DataFrame = pd.DataFrame(
         "wl_ls",
         "wl_on",
         "wl_off",
-        "stat_err_ppm",
-        "contam_err_ppm",
+        "stat_err_ppm@700",
+        "stat_err_ppm@end",
+        "contam_err_ppm@100",
+        "contam_err_ppm@500",
         "d_xs",
     ],
 )
@@ -221,27 +231,38 @@ for (s1, s2), dial_input in pair_data.items():
     results[(s1, s2)], cf_input, debug[(s1, s2)] = dc.estimate(dial_input)
     cfs[(s1, s2)] = dial.calc_correction_factor(cf_input, mol=True, aer=True)
     idx_wl_trgt = np.nanargmin(np.abs(results[(s1, s2)].stat_err[-1, :]))
-    j = np.searchsorted(results[(s1, s2)].coord.distance, 700)-1
-    print(results[(s1, s2)].coord.distance[j])
+    idx_100 = np.searchsorted(results[(s1, s2)].coord.distance, 100)-1
+    idx_500 = np.searchsorted(results[(s1, s2)].coord.distance, 500)-1
+    idx_700 = np.searchsorted(results[(s1, s2)].coord.distance, 700)-1
+    idx_1000 =-1
     analysis.loc[lbs(s1, s2)] = pd.Series(
         {
             "idx": idx_wl_trgt,
             "wl_ls": wl_laser[idx_wl_trgt],
             "wl_on": results[(s1, s2)].wl_on[idx_wl_trgt],
             "wl_off": results[(s1, s2)].wl_off[idx_wl_trgt],
-            "stat_err_ppm": utils.number_density_to_ppm(
-                results[(s1, s2)].stat_err[j, idx_wl_trgt],
-                results[(s1, s2)].coord.z[j],
+            "stat_err_ppm@700": utils.number_density_to_ppm(
+                results[(s1, s2)].stat_err[idx_700, idx_wl_trgt],
+                results[(s1, s2)].coord.z[idx_700],
             ),
-            "contam_err_ppm": utils.number_density_to_ppm(
-                results[(s1, s2)].res[j, idx_wl_trgt] - results[(s1, s2)].n_true["SO2"][j],
-                results[(s1, s2)].coord.z[j],
+            "stat_err_ppm@end": utils.number_density_to_ppm(
+                results[(s1, s2)].stat_err[-1, idx_wl_trgt],
+                results[(s1, s2)].coord.z[-1],
+            ),
+            "contam_err_ppm@100": utils.number_density_to_ppm(
+                results[(s1, s2)].res[idx_100, idx_wl_trgt] - results[(s1, s2)].n_true["SO2"][idx_100],
+                results[(s1, s2)].coord.z[idx_100],
+            ),
+            "contam_err_ppm@500": utils.number_density_to_ppm(
+                results[(s1, s2)].res[idx_500, idx_wl_trgt] - results[(s1, s2)].n_true["SO2"][idx_500],
+                results[(s1, s2)].coord.z[idx_500],
             ),
             "d_xs": debug[(s1, s2)].d_xs[idx_wl_trgt],
         }
     )
-analysis["rank"] = np.argsort(np.argsort(analysis[["stat_err_ppm"]].values.flatten()))
+analysis["rank"] = np.argsort(np.argsort(analysis[["stat_err_ppm@end"]].values.flatten()))
 print(analysis.sort_values(by="rank"))
+analysis.to_csv("samples/sim_result/anlysis.csv")
 
 # ================================
 # Result Printing (Raw text)
@@ -271,7 +292,7 @@ my_cm = lambda i: cm.coolwarm(i / num)
 
 # 受信光子数グラフエリア
 # fig1,ax1 = fig_with_fixed_ax(ax_size=(AX_H, AX_W))
-fig1, ax1 = plt.subplots()
+fig1, ax1 = plt.subplots(figsize=(4,2))
 
 # 測定シミュレーション結果グラフエリア
 # fig2,ax2 = fig_with_fixed_ax(ax_size=(AX_H, AX_W), right=0.68)
@@ -481,7 +502,7 @@ ax6.plot(spec, N(lidar_coord.z0) * 30e-6 * xs_SO2(spec), c="black")
 ax6.plot(spec, N(lidar_coord.z0) * 15e-6 * xs_H2S(spec), c="black")
 
 offset = 0.007
-x, y = 260, 0.004
+x, y = 250, 0.004
 ax6.text(x=x, y=y+offset, va="center", ha="left", s=r"H$_2$S")
 ax6.text(x=x, y=y, va="center", ha="left", s=r"(15ppm)")
 
@@ -525,7 +546,7 @@ fig7_handles.insert(0, Line2D([0], [0], linestyle="-", c="black", label=r"$\rm{S
 
 ax2.indicate_inset_zoom(ax2_ins)
 
-ax_env.set_ylim(0, 40)
+ax_env.set_ylim(-5, 40)
 ax1.set(
     xlabel="(Line of Sight) Distance [m]",
     ylabel=r"Received power $P_{\rm{phot}}$",
@@ -573,59 +594,69 @@ ax8.set(
     xlim=(0, lidar_coord.distance.max()),
     # ylim=(1e-1, 1e1),
 )
-ax1.legend(
-    bbox_to_anchor=(1.02, 1),
-    borderaxespad=0,
-    loc="upper left",
-    handles=fig1_handles,
-    frameon=True,
-)
-ax2.legend(
-    bbox_to_anchor=(1.02, 1),
-    borderaxespad=0,
-    loc="upper left",
-    handles=fig2_handles,
-    frameon=True,
-)
-ax3.legend(
-    bbox_to_anchor=(1.02, 1),
-    borderaxespad=0,
-    loc="upper left",
-    handles=color_handles,
-    frameon=True,
-)
-ax4.legend(
-    bbox_to_anchor=(1.02, 1),
-    borderaxespad=0,
-    loc="upper left",
-    handles=color_handles,
-    frameon=True,
-)
-ax7.legend(
-    bbox_to_anchor=(1.02, 1),
-    borderaxespad=0,
-    loc="upper left",
-    handles=fig2_handles,
-    frameon=True,
-)
-ax7.legend(
-    bbox_to_anchor=(1.02, 1),
-    borderaxespad=0,
-    loc="upper left",
-    handles=fig2_handles,
-    frameon=True,
-)
-ax8.legend(
-    bbox_to_anchor=(1.02, 1),
-    borderaxespad=0,
-    loc="upper left",
-    handles=fig2_handles,
-    frameon=True,
-)
+
+# ax_env.legend(
+#     bbox_to_anchor=(1.02, 1.0),
+#     borderaxespad=0,
+#     loc="upper left",
+#     frameon=True,
+# )
+# ax1.legend(
+#     bbox_to_anchor=(0.98,0.98),
+#     borderaxespad=0,
+#     loc="upper right",
+#     handles=fig1_handles,
+#     frameon=True,
+# )
+# ax2.legend(
+#     bbox_to_anchor=(1.02, 1),
+#     borderaxespad=0,
+#     loc="upper left",
+#     handles=fig2_handles,
+#     frameon=True,
+# )
+# ax3.legend(
+#     bbox_to_anchor=(1.02, 1),
+#     borderaxespad=0,
+#     loc="upper left",
+#     handles=color_handles,
+#     frameon=True,
+# )
+# ax4.legend(
+#     bbox_to_anchor=(1.02, 1),
+#     borderaxespad=0,
+#     loc="upper left",
+#     handles=color_handles,
+#     frameon=True,
+# )
+# ax7.legend(
+#     bbox_to_anchor=(1.02, 1),
+#     borderaxespad=0,
+#     loc="upper left",
+#     handles=fig2_handles,
+#     frameon=True,
+# )
+# ax7.legend(
+#     bbox_to_anchor=(1.02, 1),
+#     borderaxespad=0,
+#     loc="upper left",
+#     handles=fig2_handles,
+#     frameon=True,
+# )
+# ax8.legend(
+#     bbox_to_anchor=(1.02, 1),
+#     borderaxespad=0,
+#     loc="upper left",
+#     handles=fig2_handles,
+#     frameon=True,
+# )
 
 # ================================
 # Final output
 # ================================
+
+ax_env.xaxis.set_major_locator(ticker.LinearLocator(6))
+# ax_env.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
 # ax1.ticklabel_format(style="sci",  axis="y",scilimits=(0,0))
 # ax2.ticklabel_format(style="sci",  axis="y",scilimits=(0,0))
 # ax3.ticklabel_format(style="sci",  axis="y",scilimits=(0,0))
@@ -634,6 +665,7 @@ ax5.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
 ax5.yaxis.set_major_locator(ticker.MaxNLocator(integer=True))
 ax5.ticklabel_format(style="sci", axis="y", scilimits=(0, 0))
 
+fig_env.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
 fig1.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
 fig2.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
 fig3.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
@@ -643,60 +675,15 @@ fig6.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
 fig7.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
 fig8.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
 
-ext = "pdf"
-fig_env.savefig(
-    format=ext,
-    dpi=400,
-    bbox_inches="tight",
-    fname="samples/sim_result/sim_01_env_LoS." + ext,
-)
-# fig2.savefig(
-#     format=ext,
-#     dpi=400,
-#     bbox_inches="tight",
-#     fname="samples/sim_result/sim_01_n_SO2_6combies." + ext,
-# )
-fig3.savefig(
-    format=ext,
-    dpi=400,
-    bbox_inches="tight",
-    fname="samples/sim_result/sim_01_contami_error_6combies." + ext,
-)
-fig4.savefig(
-    format=ext,
-    dpi=400,
-    bbox_inches="tight",
-    fname="samples/sim_result/sim_01_stat_error_6combies." + ext,
-)
-fig5.savefig(
-    format=ext,
-    dpi=400,
-    bbox_inches="tight",
-    fname="samples/sim_result/sim_01_cond_2case." + ext,
-)
-fig1.savefig(
-    format=ext,
-    dpi=400,
-    bbox_inches="tight",
-    fname="samples/sim_result/sim_01_power." + ext,
-)
-fig6.savefig(
-    format=ext,
-    dpi=400,
-    bbox_inches="tight",
-    fname="samples/sim_result/sim_01_3gases_absorp." + ext,
-)
-fig7.savefig(
-    format=ext,
-    dpi=400,
-    bbox_inches="tight",
-    fname="samples/sim_result/sim_01_6combies_cntm." + ext,
-)
-fig8.savefig(
-    format=ext,
-    dpi=400,
-    bbox_inches="tight",
-    fname="samples/sim_result/sim_01_6combies_stat." + ext,
-)
-plt.show(block=False)
-input("PRESS ANY KEY...")
+fig_env.savefig(str(OUT_DIR / f"sim_01_env_LoS.{EXT}"), format=EXT)
+# fig2.savefig(str(OUT_DIR / f"sim_01_n_SO2_6combies.{EXT}"), format=EXT)
+fig3.savefig(str(OUT_DIR / f"sim_01_contami_error_6combies.{EXT}"), format=EXT)
+fig4.savefig(str(OUT_DIR / f"sim_01_stat_error_6combies.{EXT}"), format=EXT)
+fig5.savefig(str(OUT_DIR / f"sim_01_cond_2case.{EXT}"), format=EXT)
+fig1.savefig(str(OUT_DIR / f"sim_01_power.{EXT}"), format=EXT)
+fig6.savefig(str(OUT_DIR / f"sim_01_3gases_absorp.{EXT}"), format=EXT)
+fig7.savefig(str(OUT_DIR / f"sim_01_6combies_cntm.{EXT}"), format=EXT)
+fig8.savefig(str(OUT_DIR / f"sim_01_6combies_stat.{EXT}"), format=EXT)
+
+# plt.show(block=False)
+# input("PRESS ANY KEY...")

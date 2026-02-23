@@ -1,23 +1,27 @@
 # coding: utf-8
-from doctest import debug
 import sys
-from turtle import distance
 import numpy as np
 import pandas as pd
 from pathlib import Path
 from dataclasses import dataclass
 from itertools import combinations
-from matplotlib import cm, legend, markers
+from matplotlib import cm
 from matplotlib import pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib.lines import Line2D
 from numpy.lib.stride_tricks import sliding_window_view as np_SWV
-from pytest import mark
 
-# プロジェクトルートを sys.path に追加
-# __file__ = samples/a.py
-project_root = Path(__file__).resolve().parent.parent
-sys.path.append(str(project_root))
+# ================================
+# Project path setup
+# ================================
+PROJ_ROOT = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent
+OUT_DIR = BASE_DIR / "samples" / "sim_result"
+EXT="pdf"
+
+sys.path.append(str(PROJ_ROOT))
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+
 
 from gas_simulation import utils
 from gas_simulation.consts import main_gases_props
@@ -29,7 +33,7 @@ from gas_simulation.lidar_model import lidar
 from gas_simulation.lidar_model import dial
 from gas_simulation import result_viewer as viewer
 
-plt.style.use("my_sty.mplstyle")
+plt.style.use("forThesis.mplstyle")
 
 xs_SO2 = utils.load_cross_section(
     "SO2_VandaeleHermansFally(2009)_358K_227.275-416.658nm.xlsx",
@@ -77,7 +81,7 @@ env = InstantEnvironment(
     time=T_SEC,
     trig=lambda x: ((x >= 300) & (x <= 700)),
 )
-env.show_gases(lidar_coord)
+fig_env, ax_env = env.show_gases(lidar_coord)
 
 wl_laser = np.arange(240, 370, 0.02)
 wl = {
@@ -205,16 +209,14 @@ print(f"est {est[2]:<8.4g} [ppm] : {n_cf_3[0]:< 10.5g}({eps[4,0]:< 10.5g}), {n_c
 
 new_coord = res1.coord.with_(distance=np.linspace(0, lidar_coord.distance[-1], 1000))
 
-fig, ax = plt.subplots(1, 1, layout="constrained")
-ax.grid(False)
-
+fig, ax = plt.subplots(1, 1)
 ax.plot(
     new_coord.distance,
     utils.number_density_to_ppm(
         env.number_density_at(new_coord.x, 0, new_coord.z)["SO2"],
         new_coord.z
     ),
-    label=r"$SO_2$ setting",
+    label=r"SO$_2$ setting",
     c="black",
     ls="--",
     zorder=5
@@ -251,11 +253,26 @@ ax.plot(
 )
 ax.set(
     xlabel="(Line of Sight) Distance [m]",
-    ylabel=r"SO_2 Concentration [ppm]",
+    ylabel=r"SO$_2$ Concentration [ppm]",
     xlim=(0, lidar_coord.distance[-1]),
     # ylim=(0, 40),
 )
-ax.legend(loc="upper left")
-fig.savefig("samples/sim_result/sim_02_2_contami_result.pdf", dpi=400)
-plt.show(block=False)
-input("PRESS ANY KEY...")
+ax_env.set_ylim(0, 1100)
+
+ax.legend()
+ax.legend(
+    bbox_to_anchor=(1.02, 1.0),
+    borderaxespad=0,
+    loc="upper left",
+    frameon=True
+)
+fig.subplots_adjust(right=0.8)  # ← 右側に凡例用の余白を確保
+
+fig_env.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
+# fig.tight_layout(pad=0.5, w_pad=0.5, h_pad=0.5)
+
+fig_env.savefig(str(OUT_DIR / f"sim_02_2_env.{EXT}"), format=EXT)
+fig.savefig(str(OUT_DIR / f"sim_02_2_contami_result.{EXT}"), format=EXT)
+
+# plt.show(block=False)
+# input("PRESS ANY KEY...")
